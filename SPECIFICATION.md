@@ -1,4 +1,4 @@
-# Version v1.0-alpha4
+# Version v1.0-alpha5
 
 ### Value
 
@@ -13,7 +13,7 @@ value ::=
     | \x0A object
     | \b1???????      # deleted
 
-number              ::= number_length json_encoded_string
+number              ::= number_length json_number_string
 
 number_length       ::= uint8
 
