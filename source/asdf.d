@@ -16,8 +16,8 @@ import std.meta;
 //	}
 //}
 
-//version(X86)
-//	version = GeneralUnaligned;
+version(X86)
+	version = GeneralUnaligned;
 
 
 //static __gshared immutable whiteSpacesSet0 = " \t\r\n\0\0\0\0\0\0\0\0\0\0\0\0";
