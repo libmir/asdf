@@ -19,7 +19,6 @@ import std.meta;
 version(X86)
 	version = GeneralUnaligned;
 
-
 //static __gshared immutable whiteSpacesSet0 = " \t\r\n\0\0\0\0\0\0\0\0\0\0\0\0";
 //static __gshared immutable whiteSpacesSet1 = " \t\r\0\0\0\0\0\0\0\0\0\0\0\0\0";
 //static __gshared immutable numberSet = "0123456789Ee+-.\0";
@@ -29,13 +28,87 @@ version(X86)
 //static __gshared immutable trueSeq = "true\0\0\0\0\0\0\0\0\0\0\0\0";
 //static __gshared immutable falseSeq = "false\0\0\0\0\0\0\0\0\0\0\0";
 
-template Iota(size_t i, size_t j)
+private template Iota(size_t i, size_t j)
 {
     static assert(i <= j, "Iota: i should be less than or equal to j");
     static if (i == j)
         alias Iota = AliasSeq!();
     else
         alias Iota = AliasSeq!(i, Iota!(i + 1, j));
+}
+
+auto byLineValue(Chunks)(Chunks chunks, size_t initLength)
+{
+	static struct LineValue
+	{
+		private Asdf!(false, Chunks) asdf;
+		private bool _empty, _nextEmpty;
+
+		void popFront()
+		{
+			assert(!empty);
+			if(_nextEmpty)
+			{
+				_empty = true;
+				return;
+			}
+			asdf.oa.shift = 0;
+			auto length = asdf.readValue;
+			if(length > 0)
+			{
+				auto t = asdf.skipSpaces;
+				if(t != '\n' && t != 0)
+					length = -t;
+				else if(t == 0)
+				{
+					_nextEmpty = true;
+					return;
+				}
+			}
+			if(length <= 0)
+			{
+				length = -length;
+				asdf.oa.shift = 0;
+				while(length != '\n' && length != 0)
+				{
+					length = asdf.pop;
+				}
+			}
+			_nextEmpty = length ? asdf.refresh : 0;
+		}
+
+		auto front() @property
+		{
+			assert(!empty);
+			return asdf.oa.result;
+		}
+
+		bool empty()
+		{
+			return _empty;
+		}
+	}
+	LineValue ret; 
+	if(chunks.empty)
+	{
+		ret._empty = ret._nextEmpty = true;
+	}
+	else
+	{
+		ret = LineValue(Asdf!(false, Chunks)(chunks.front, chunks, OutputArray(initLength)));
+		ret.popFront;
+	}
+	return ret;
+}
+
+unittest
+{
+	import std.stdio;
+	auto values = File("test.json").byChunk(4096).byLineValue(4096);
+	foreach(val; values)
+	{
+		//writefln(" ^^ %s", val.length);
+	}
 }
 
 
@@ -60,7 +133,8 @@ auto asdf(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
 unittest
 {
 	import std.stdio;
-	auto c = asdf!(true, typeof(File("test.json").byChunk(4096)))(File("test.json").byChunk(4096), 4096);
+	auto c = asdf(File("test.json").byChunk(4096), 4096);
+	//writeln(c.length);
 }
 
 struct Asdf(bool includingN = true, Chunks)
@@ -69,22 +143,47 @@ struct Asdf(bool includingN = true, Chunks)
 	Chunks chunks;
 	OutputArray oa;
 
-	uint pop()
+	bool refresh() @property
 	{
 		if(r.length == 0)
 		{
 			assert(!chunks.empty);
 			chunks.popFront;
 			if(chunks.empty)
-				return 0;  // unexpected end of input
+				return true;
 			r = chunks.front;
 		}
-		uint ret = r[0];
+		return false;
+	} 
+
+	int front()
+	{
+		if(r.length == 0)
+		{
+			assert(!chunks.empty);
+			chunks.popFront;
+			if(chunks.empty)
+			{
+				return 0;  // unexpected end of input
+			}
+			r = chunks.front;
+		}
+		return r[0];
+	}
+
+	void popFront()
+	{
 		r = r[1 .. $];
+	}
+
+	int pop()
+	{
+		int ret = front;
+		if(ret != 0) popFront;
 		return ret;
 	}
 
-	uint skipSpaces()
+	int skipSpaces()
 	{
 		for(;;)
 		{
@@ -94,8 +193,11 @@ struct Asdf(bool includingN = true, Chunks)
 				case  ' ':
 				case '\t':
 				case '\r':
-				static if(includingN) case '\n':
-					break;
+				static if(includingN)
+				{
+					case '\n':
+				}
+					continue;
 				default:
 					return c;
 			}
@@ -172,15 +274,7 @@ struct Asdf(bool includingN = true, Chunks)
 		oa.put1(c);
 		for(;;)
 		{
-			if(r.length == 0)
-			{
-				assert(!chunks.empty);
-				chunks.popFront;
-				if(chunks.empty)
-					return 0;  // unexpected end of input
-				r = chunks.front;
-			}
-			uint d = r[0];
+			uint d = front;
 			switch(d)
 			{
 				case '0':
@@ -191,7 +285,7 @@ struct Asdf(bool includingN = true, Chunks)
 				case '.':
 				case 'e':
 				case 'E':
-					r = r[1..$];
+					popFront;
 					oa.put1(cast(ubyte)d);
 					len++;
 					break;
@@ -312,7 +406,7 @@ struct OutputArray
 		array = cast(ubyte[]) GCAllocator.instance.allocate(GCAllocator.instance.goodAllocSize(initialLength));
 	}
 
-	size_t skip(size_t len)
+	size_t skip(size_t len) @safe pure nothrow @nogc
 	{
 		auto ret = shift;
 		shift += len;
@@ -388,4 +482,23 @@ struct OutputArray
 		GCAllocator.instance.reallocate(t, array.length * 2);
 		array = cast(ubyte[])t;
 	}
+}
+
+version(APP)
+void main(string[] args)
+{
+	import std.datetime;
+	import std.conv;
+	import std.stdio;
+	auto values = File(args[1]).byChunk(4096).byLineValue(4096);
+	size_t len;
+	StopWatch sw;
+	sw.start;
+	foreach(val; values)
+	{
+		len += val.length;
+	}
+	sw.stop;
+	writefln("%s bytes", len);
+	writeln(sw.peek.to!Duration);
 }
