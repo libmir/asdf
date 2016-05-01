@@ -1,4 +1,7 @@
 import std.meta;
+import std.exception;
+import std.range.primitives;
+import std.typecons;
 
 //import core.simd;
 
@@ -37,11 +40,11 @@ private template Iota(size_t i, size_t j)
         alias Iota = AliasSeq!(i, Iota!(i + 1, j));
 }
 
-auto byLineValue(Chunks)(Chunks chunks, size_t initLength)
+auto parseAsdfByLine(Chunks)(Chunks chunks, size_t initLength)
 {
 	static struct LineValue
 	{
-		private Asdf!(false, Chunks) asdf;
+		private AsdfParser!(false, Chunks) asdf;
 		private bool _empty, _nextEmpty;
 
 		void popFront()
@@ -95,7 +98,7 @@ auto byLineValue(Chunks)(Chunks chunks, size_t initLength)
 	}
 	else
 	{
-		ret = LineValue(Asdf!(false, Chunks)(chunks.front, chunks, OutputArray(initLength)));
+		ret = LineValue(AsdfParser!(false, Chunks)(chunks.front, chunks, OutputArray(initLength)));
 		ret.popFront;
 	}
 	return ret;
@@ -104,42 +107,337 @@ auto byLineValue(Chunks)(Chunks chunks, size_t initLength)
 unittest
 {
 	import std.stdio;
-	auto values = File("test.json").byChunk(4096).byLineValue(4096);
+	auto values = File("test.json").byChunk(4096).parseAsdfByLine(4096);
 	foreach(val; values)
 	{
 		//writefln(" ^^ %s", val.length);
 	}
 }
 
-
-auto asdf(bool includingN = true, Chunks)(Chunks chunks, ubyte[] front, size_t initLength)
+auto parseAsdf(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
 {
 	import std.format: format;
-	auto c = Asdf!(includingN, Chunks)(front, chunks, OutputArray(initLength));
+	auto c = AsdfParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
 	auto r = c.readValue;
 	if(r == 0)
 		throw new Exception("Unexpected end of input");
 	if(r < 0)
-		throw new Exception("Unexpected character \\x%02X : %s".format(-r, cast(char)-r
-			));
+		throw new Exception("Unexpected character \\x%02X : %s".format(-r, cast(char)-r));
 	return c.oa.result;
 }
 
-auto asdf(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
+auto parseAsdf(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
 {
-	return asdf!(includingN, Chunks)(chunks, chunks.front, initLength);
+	return parseAsdf!(includingN, Chunks)(chunks, chunks.front, initLength);
 }
 
 unittest
 {
+	import std.conv: to;
+	import std.range;
+	auto text = cast(const ubyte[])`{"a":[true],"b":false,"c":32323,"dsdsd":{"a":true,"b":false,"c":"32323","d":null,"dsdsd":{}}}`;
+	auto asdf = text.chunks(13).parseAsdf(32);
 	import std.stdio;
-	auto c = asdf(File("test.json").byChunk(4096), 4096);
-	//writeln(c.length);
+	assert(asdf.getValue(["dsdsd", "d"]) == null);
+	assert(asdf.getValue(["dsdsd", "a"]) == true);
+	assert(asdf.getValue(["dsdsd", "b"]) == false);
+	assert(asdf.getValue(["dsdsd", "c"]) == "32323");
+	assert(asdf.to!string == text);
 }
 
-struct Asdf(bool includingN = true, Chunks)
+Asdf getValue(Asdf asdf, in char[][] keys)
 {
-	ubyte[] r;
+	import std.algorithm.iteration: splitter;
+	if(asdf.data.empty)
+		return Asdf.init;
+	L: foreach(key; keys)
+	{
+		if(asdf.data[0] != 0x0A)
+			return Asdf.init;
+		foreach(e; asdf.byKeyValue)
+		{
+			if(e.key == key)
+			{
+				asdf = e.value;
+				continue L;
+			}
+		}
+		return Asdf.init;
+	}
+	return asdf;
+}
+
+struct Asdf
+{
+	ubyte[] data;
+
+	void toString(Dg)(scope Dg sink)
+	{
+		enforce(data.length);
+		auto t = data[0];
+		switch(t)
+		{
+			case 0x00:
+				enforce(data.length == 1);
+				sink("null");
+				break;
+			case 0x01:
+				enforce(data.length == 1);
+				sink("true");
+				break;
+			case 0x02:
+				enforce(data.length == 1);
+				sink("false");
+				break;
+			case 0x03:
+				enforce(data.length > 1);
+				size_t length = data[1];
+				enforce(data.length == length + 2);
+				sink(cast(string) data[2 .. $]);
+				break;
+			case 0x05:
+				enforce(data.length == length4 + 5);
+				sink("\"");
+				sink(cast(string) data[5 .. $]);
+				sink("\"");
+				break;
+			case 0x09:
+				auto elems = byElement;
+				if(byElement.empty)
+				{
+					sink("[]");
+					break;
+				}
+				sink("[");
+				//writefln("`%s`", elems.front.data);
+				elems.front.toString(sink);
+				elems.popFront;
+				foreach(e; elems)
+				{
+					sink(",");
+					e.toString(sink);
+				}
+				sink("]");
+				break;
+			case 0x0A:
+				auto pairs = byKeyValue;
+				if(byKeyValue.empty)
+				{
+					sink("{}");
+					break;
+				}
+				sink("{\"");
+				sink(pairs.front.key);
+				sink("\":");
+				pairs.front.value.toString(sink);
+				pairs.popFront;
+				foreach(e; pairs)
+				{
+					sink(",\"");
+					sink(e.key);
+					sink("\":");
+					e.value.toString(sink);
+				}
+				sink("}");
+				break;
+			default:
+				enforce(0);
+		}
+	}
+
+	bool opEquals(typeof(null)) const
+	{
+		return data.length == 1 && data[0] == 0;
+	}
+
+	bool opEquals(bool boolean) const
+	{
+		return data.length == 1 && (data[0] == 0x01 && boolean || data[0] == 0x02 && !boolean);
+	}
+
+	bool opEquals(in char[] str) const
+	{
+		return data.length >= 5 && data[0] == 0x05 && data[5 .. 5 + length4] == cast(const(ubyte)[]) str;
+	}
+
+	auto byElement()
+	{
+		enforce(length4 == data.length - 5);
+		enforce(data[0] == 0x09);
+		static struct Range
+		{
+			private ubyte[] _data;
+			private Asdf _front;
+
+			void popFront()
+			{
+				while(!_data.empty)
+				{
+					uint c = cast(ubyte) _data.front;
+					switch(c)
+					{
+						case 0x00:
+						case 0x01:
+						case 0x02:
+							_front = Asdf(_data[0 .. 1]);
+							_data.popFront;
+							return;
+						case 0x03:
+							enforce(_data.length >= 2);
+							size_t len = _data[1] + 2;
+							enforce(_data.length >= len);
+							_front = Asdf(_data[0 .. len]);
+							_data = _data[len .. $];
+							return;
+						case 0x05:
+						case 0x09:
+						case 0x0A:
+							enforce(_data.length >= 5);
+							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							enforce(_data.length >= len);
+							_front = Asdf(_data[0 .. len]);
+							_data = _data[len .. $];
+							return;
+						case 0x80:
+						case 0x81:
+						case 0x82:
+							_data.popFront;
+							continue;
+						case 0x83:
+							enforce(_data.length >= 2);
+							_data.popFrontExactly(_data[1] + 2);
+							continue;
+						case 0x85:
+						case 0x89:
+						case 0x8A:
+							enforce(_data.length >= 5);
+							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							_data.popFrontExactly(len);
+							continue;
+						default:
+							enforce(0);
+					}
+				}
+				_front = Asdf.init;
+			}
+
+			auto front() @property
+			{
+				assert(!empty);
+				return _front;
+			}
+
+			bool empty() @property
+			{
+				return _front.data.length == 0;
+			}
+		}
+		auto ret = Range(data[5 .. $]);
+		if(ret._data.length)
+			ret.popFront;
+		return ret;
+	}
+
+	auto byKeyValue()
+	{
+		enforce(length4 == data.length - 5);
+		enforce(data[0] == 0x0A);
+		static struct Range
+		{
+			private ubyte[] _data;
+			private Tuple!(const(char)[], "key", Asdf, "value") _front;
+
+			void popFront()
+			{
+				while(!_data.empty)
+				{
+					enforce(_data.length > 1);
+					size_t l = cast(ubyte) _data[0];
+					_data.popFront;
+					enforce(_data.length >= l);
+					_front.key = cast(const(char)[])_data[0 .. l];
+					_data.popFrontExactly(l);
+					uint c = cast(ubyte) _data.front;
+					switch(c)
+					{
+						case 0x00:
+						case 0x01:
+						case 0x02:
+							_front.value = Asdf(_data[0 .. 1]);
+							_data.popFront;
+							return;
+						case 0x03:
+							enforce(_data.length >= 2);
+							size_t len = _data[1] + 2;
+							enforce(_data.length >= len);
+							_front.value = Asdf(_data[0 .. len]);
+							_data = _data[len .. $];
+							return;
+						case 0x05:
+						case 0x09:
+						case 0x0A:
+							enforce(_data.length >= 5);
+							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							enforce(_data.length >= len);
+							_front.value = Asdf(_data[0 .. len]);
+							_data = _data[len .. $];
+							return;
+						case 0x80:
+						case 0x81:
+						case 0x82:
+							_data.popFront;
+							continue;
+						case 0x83:
+							enforce(_data.length >= 2);
+							_data.popFrontExactly(_data[1] + 2);
+							continue;
+						case 0x85:
+						case 0x89:
+						case 0x8A:
+							enforce(_data.length >= 5);
+							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							_data.popFrontExactly(len);
+							continue;
+						default:
+							enforce(0);
+					}
+				}
+				_front = _front.init;
+			}
+
+			auto front() @property
+			{
+				assert(!empty);
+				return _front;
+			}
+
+			bool empty() @property
+			{
+				return _front.value.data.length == 0;
+			}
+		}
+		auto ret = Range(data[5 .. $]);
+		if(ret._data.length)
+			ret.popFront;
+		return ret;
+	}
+
+	private size_t length1() const @property
+	{
+		enforce(data.length >= 2);
+		return data[1];
+	}
+
+	private size_t length4() const @property
+	{
+		enforce(data.length >= 5);
+		return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
+	}
+}
+
+private struct AsdfParser(bool includingN = true, Chunks)
+{
+	const(ubyte)[] r;
 	Chunks chunks;
 	OutputArray oa;
 
@@ -397,7 +695,7 @@ struct OutputArray
 
 	auto result()
 	{
-		return array[0 .. shift];
+		return Asdf(array[0 .. shift]);
 	}
 
 	this(size_t initialLength)
@@ -406,10 +704,12 @@ struct OutputArray
 		array = cast(ubyte[]) GCAllocator.instance.allocate(GCAllocator.instance.goodAllocSize(initialLength));
 	}
 
-	size_t skip(size_t len) @safe pure nothrow @nogc
+	size_t skip(size_t len)
 	{
 		auto ret = shift;
 		shift += len;
+		if(shift > array.length)
+			extend;
 		return ret;
 	}
 
@@ -490,15 +790,27 @@ void main(string[] args)
 	import std.datetime;
 	import std.conv;
 	import std.stdio;
-	auto values = File(args[1]).byChunk(4096).byLineValue(4096);
-	size_t len;
+	import std.format;
+	auto values = File(args[1]).byChunk(4096).parseAsdfByLine(4096);
+	size_t len, count;
 	StopWatch sw;
 	sw.start;
-	foreach(val; values)
 	{
-		len += val.length;
+		FormatSpec!char fmt;
+		auto wr = stdout.lockingTextWriter;
+		foreach(val; values)
+		{
+			len += val.data.length;
+			if(val.getValue(["dsrc"]) == "20min.ch")
+			{
+				count++;
+				wr.formatValue(val, fmt);
+				wr.put("\n");
+			}
+		}
 	}
 	sw.stop;
-	writefln("%s bytes", len);
-	writeln(sw.peek.to!Duration);
+	//writefln("%s bytes of input", len);
+	//writefln("%s lines of output", count);
+	//writeln(sw.peek.to!Duration);
 }
