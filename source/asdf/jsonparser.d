@@ -21,11 +21,12 @@ auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] fro
 {
 	import std.format: format;
 	auto c = AsdfParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
+	import std.conv: ConvException;
 	auto r = c.readValue;
 	if(r == 0)
-		throw new Exception("Unexpected end of input");
+		throw new ConvException("Unexpected end of input");
 	if(r < 0)
-		throw new Exception("Unexpected character \\x%02X : %s".format(-r, cast(char)-r));
+		throw new ConvException("Unexpected character \\x%02X : %s".format(-r, cast(char)-r));
 	return c.oa.result;
 }
 
