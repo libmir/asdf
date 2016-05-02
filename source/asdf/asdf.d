@@ -160,7 +160,7 @@ struct Asdf
 						case 0x09:
 						case 0x0A:
 							enforce!AsdfException(_data.length >= 5);
-							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							size_t len = Asdf(_data).length4 + 5;
 							enforce!AsdfException(_data.length >= len);
 							_front = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
@@ -178,7 +178,7 @@ struct Asdf
 						case 0x89:
 						case 0x8A:
 							enforce!AsdfException(_data.length >= 5);
-							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							size_t len = Asdf(_data).length4 + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
@@ -244,7 +244,7 @@ struct Asdf
 						case 0x09:
 						case 0x0A:
 							enforce!AsdfException(_data.length >= 5);
-							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							size_t len = Asdf(_data).length4 + 5;
 							enforce!AsdfException(_data.length >= len);
 							_front.value = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
@@ -262,7 +262,7 @@ struct Asdf
 						case 0x89:
 						case 0x8A:
 							enforce!AsdfException(_data.length >= 5);
-							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
+							size_t len = Asdf(_data).length4 + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
