@@ -305,9 +305,9 @@ struct Asdf
 	}
 }
 
-Asdf getValue(Asdf asdf, in char[][] keys)
+Asdf getValue(Range)(Asdf asdf, Range keys)
+	if(is(ElementType!Range : const(char)[]))
 {
-	import std.algorithm.iteration: splitter;
 	if(asdf.data.empty)
 		return Asdf.init;
 	L: foreach(key; keys)
