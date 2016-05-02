@@ -2,7 +2,7 @@ module asdf.jsonparser;
 
 import asdf.outputarray;
 
-auto parseAsdf(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
+auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
 {
 	import std.format: format;
 	auto c = AsdfParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
@@ -14,12 +14,12 @@ auto parseAsdf(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] fro
 	return c.oa.result;
 }
 
-auto parseAsdf(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
+auto parseJson(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
 {
-	return parseAsdf!(includingN, Chunks)(chunks, chunks.front, initLength);
+	return parseJson!(includingN, Chunks)(chunks, chunks.front, initLength);
 }
 
-auto parseAsdfByLine(Chunks)(Chunks chunks, size_t initLength)
+auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
 {
 	static struct LineValue
 	{
@@ -83,7 +83,7 @@ auto parseAsdfByLine(Chunks)(Chunks chunks, size_t initLength)
 	return ret;
 }
 
-package struct AsdfParser(bool includingN = true, Chunks)
+package struct JsonParser(bool includingN = true, Chunks)
 {
 	const(ubyte)[] r;
 	Chunks chunks;
