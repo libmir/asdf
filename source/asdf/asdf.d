@@ -35,10 +35,17 @@ class AsdfException: Exception
 	}
 }
 
+/++
+The structure for ASDF manipulation.
++/
 struct Asdf
 {
+	/++
+	Plain ASDF data.
+	+/
 	ubyte[] data;
 
+	///
 	void toString(Dg)(scope Dg sink)
 	{
 		enforce!AsdfException(data.length);
@@ -112,21 +119,79 @@ struct Asdf
 		}
 	}
 
+	///
+	unittest
+	{
+		import std.conv: to;
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData.to!string == text);
+	}
+
+	/++
+	`==` operator overloads for `null`
+	+/
 	bool opEquals(typeof(null)) const
 	{
 		return data.length == 1 && data[0] == 0;
 	}
 
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`null`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData == null);
+	}
+
+	/++
+	`==` operator overloads for `bool`
+	+/
 	bool opEquals(bool boolean) const
 	{
 		return data.length == 1 && (data[0] == 0x01 && boolean || data[0] == 0x02 && !boolean);
 	}
 
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`true`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData == true);
+		assert(asdfData != false);
+	}
+
+	/++
+	`==` operator overloads for `string`
+	+/
 	bool opEquals(in char[] str) const
 	{
 		return data.length >= 5 && data[0] == 0x05 && data[5 .. 5 + length4] == cast(const(ubyte)[]) str;
 	}
 
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`"str"`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData == "str");
+		assert(asdfData != "stR");
+	}
+
+	/++
+	Returns:
+		input range composed of elements of an array.
+	Throws:
+		$(LREF AsdfException) if values type is not array or plain data is invalid.
+	+/
 	auto byElement()
 	{
 		enforce!AsdfException(length4 == data.length - 5);
@@ -205,6 +270,13 @@ struct Asdf
 		return ret;
 	}
 
+	/++
+	Returns:
+		Input range composed of key-value pairs of an object.
+		Elements are type of `Tuple!(const(char)[], "key", Asdf, "value")`.
+	Throws:
+		$(LREF AsdfException) if values type is not object or plain data is invalid.
+	+/
 	auto byKeyValue()
 	{
 		enforce!AsdfException(length4 == data.length - 5);
@@ -289,12 +361,14 @@ struct Asdf
 		return ret;
 	}
 
+	/// returns 1-byte length
 	private size_t length1() const @property
 	{
 		enforce!AsdfException(data.length >= 2);
 		return data[1];
 	}
 
+	/// returns 4-byte length
 	private size_t length4() const @property
 	{
 		enforce!AsdfException(data.length >= 5);
@@ -305,6 +379,15 @@ struct Asdf
 	}
 }
 
+/++
+Searches a value recursively in an ASDF object.
+
+Params:
+	asdf = ASDF data
+	keys = input range of keys
+Returns
+	ASDF value if it was found (first win) or ASDF with empty plain data.
++/
 Asdf getValue(Range)(Asdf asdf, Range keys)
 	if(is(ElementType!Range : const(char)[]))
 {
@@ -325,4 +408,17 @@ Asdf getValue(Range)(Asdf asdf, Range keys)
 		return Asdf.init;
 	}
 	return asdf;
+}
+
+///
+unittest
+{
+	import asdf.jsonparser;
+	import std.range: chunks;
+	auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+	auto asdfData = text.chunks(13).parseJson(32);
+	assert(asdfData.getValue(["inner", "a"]) == true);
+	assert(asdfData.getValue(["inner", "b"]) == false);
+	assert(asdfData.getValue(["inner", "c"]) == "32323");
+	assert(asdfData.getValue(["inner", "d"]) == null);
 }
