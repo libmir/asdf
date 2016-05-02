@@ -1,5 +1,6 @@
 {
 	"name": "asdf",
+	"description": "A Simple Document Format",
 	"license": "MIT",
 	"authors": ["Ilya Yaroshenko"],
 	"copyright": "Tamedia Digital, 2016"
