@@ -9,7 +9,7 @@ unittest
 	import std.conv: to;
 	import std.range;
 	auto text = cast(const ubyte[])`{"a":[true],"b":false,"c":32323,"dsdsd":{"a":true,"b":false,"c":"32323","d":null,"dsdsd":{}}}`;
-	auto asdf = text.chunks(13).parseAsdf(32);
+	auto asdf = text.chunks(13).parseJson(32);
 	import std.stdio;
 	assert(asdf.getValue(["dsdsd", "d"]) == null);
 	assert(asdf.getValue(["dsdsd", "a"]) == true);
