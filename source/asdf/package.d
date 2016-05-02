@@ -1,3 +1,20 @@
+/++
+$(H2 ASDF Package)
+
+Publicly imports $(SUBMODULE asdf) and $(SUBMODULE jsonparser).
+
+Copyright: Tamedia Digital, 2016
+
+Authors: Ilya Yaroshenko
+
+License: MIT
+
+Macros:
+SUBMODULE = $(LINK2 asdf_$1.html, asdf.$1)
+SUBREF = $(LINK2 asdf_$1.html#.$2, $(TT $2))$(NBSP)
+T2=$(TR $(TDNW $(LREF $1)) $(TD $+))
+T4=$(TR $(TDNW $(LREF $1)) $(TD $2) $(TD $3) $(TD $4))
++/
 module asdf;
 
 public import asdf.asdf;
