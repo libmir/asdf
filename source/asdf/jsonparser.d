@@ -17,6 +17,14 @@ module asdf.jsonparser;
 
 import asdf.outputarray;
 
+/++
+
++/
+auto parseJson(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
+{
+	return parseJson!(includingN, Chunks)(chunks, chunks.front, initLength);
+}
+
 auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
 {
 	import std.format: format;
@@ -28,11 +36,6 @@ auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] fro
 	if(r < 0)
 		throw new ConvException("Unexpected character \\x%02X : %s".format(-r, cast(char)-r));
 	return c.oa.result;
-}
-
-auto parseJson(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
-{
-	return parseJson!(includingN, Chunks)(chunks, chunks.front, initLength);
 }
 
 auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
