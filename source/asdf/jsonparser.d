@@ -15,21 +15,49 @@ T4=$(TR $(TDNW $(LREF $1)) $(TD $2) $(TD $3) $(TD $4))
 +/
 module asdf.jsonparser;
 
+import std.range.primitives;	
+import asdf.asdf;
 import asdf.outputarray;
 
 /++
-
+Parses json value
+Params:
+	chunks = input range composed of elements type of `const(ubyte)[]`.
+		`chunks` can use the same buffer for each chunk.
+	initLength = initial output buffer length. Minimal value equals 32.
+Returns:
+	ASDF value
 +/
-auto parseJson(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
+Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, size_t initLength)
+	if(is(ElementType!Chunks : const(ubyte)[]))
 {
-	return parseJson!(includingN, Chunks)(chunks, chunks.front, initLength);
+	return parseJson!(includingNewLine, Chunks)(chunks, chunks.front, initLength);
 }
 
-auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
+///
+unittest
+{
+	import asdf.jsonparser;
+	import std.range: chunks;
+	auto text = cast(const ubyte[])`true`;
+	assert(text.chunks(3).parseJson(32).data == [1]);
+}
+
+/++
+Params:
+	chunks = input range composed of elements type of `const(ubyte)[]`.
+		`chunks` can use the same buffer for each chunk.
+	front = current front element of `chunks` or its part
+	initLength = initial output buffer length. Minimal value equals 32.
+Returns:
+	ASDF value
++/
+Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
+	if(is(ElementType!Chunks : const(ubyte)[]))
 {
 	import std.format: format;
 	import std.conv: ConvException;
-	auto c = JsonParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
+	auto c = JsonParser!(includingNewLine, Chunks)(front, chunks, OutputArray(initLength));
 	auto r = c.readValue;
 	if(r == 0)
 		throw new ConvException("Unexpected end of input");
@@ -38,6 +66,25 @@ auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] fro
 	return c.oa.result;
 }
 
+///
+unittest
+{
+	import asdf.jsonparser;
+	import std.range: chunks;
+	auto text = cast(const ubyte[])`true `;
+	auto ch = text.chunks(3);
+	assert(ch.parseJson(ch.front, 32).data == [1]);
+}
+
+/++
+Parses JSON value in each line.
+Params:
+	chunks = input range composed of elements type of `const(ubyte)[]`.
+		`chunks` can use the same buffer for each chunk.
+	initLength = initial output buffer length. Minimal value equals 32.
+Returns:
+	Input range composed of ASDF values. Each value uses the same internal buffer.
++/
 auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
 {
 	static struct ByLineValue
@@ -102,7 +149,21 @@ auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
 	return ret;
 }
 
-package struct JsonParser(bool includingN = true, Chunks)
+///
+unittest
+{
+	import asdf.jsonparser;
+	import std.range: chunks;
+	auto text = cast(const ubyte[])"\t true \r\r\n false\t";
+	auto values = text.chunks(3).parseJsonByLine(32);
+	assert(values.front.data == [1]);
+	values.popFront;
+	assert(values.front.data == [2]);
+	values.popFront;
+	assert(values.empty);
+}
+
+package struct JsonParser(bool includingNewLine = true, Chunks)
 {
 	const(ubyte)[] r;
 	Chunks chunks;
@@ -141,6 +202,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		r = r[1 .. $];
 	}
 
+
 	int pop()
 	{
 		int ret = front;
@@ -148,6 +210,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		return ret;
 	}
 
+	// skips `' '`, `'\t'`, `'\r'`, and optinally '\n'.
 	int skipSpaces()
 	{
 		for(;;)
@@ -158,7 +221,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 				case  ' ':
 				case '\t':
 				case '\r':
-				static if(includingN)
+				static if(includingNewLine)
 				{
 					case '\n':
 				}
@@ -169,6 +232,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		}
 	}
 
+	// reads any value
 	sizediff_t readValue()
 	{
 		int c = skipSpaces;
@@ -188,6 +252,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		}
 	}
 
+	// reads a string
 	sizediff_t readStringImpl()
 	{
 		oa.put1(0x05);
@@ -210,6 +275,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		}
 	}
 
+	// reads a key in an object
 	sizediff_t readKeyImpl()
 	{
 		auto s = oa.skip(1);
@@ -231,6 +297,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		}
 	}
 
+	// reads a number
 	sizediff_t readNumberImpl(ubyte c)
 	{
 		oa.put1(0x03);
@@ -261,6 +328,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		}
 	}
 
+	// reads `null`, `true`, or `false`
 	sizediff_t readWord(string word, ubyte t)()
 	{
 		import asdf.utility;
@@ -274,6 +342,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		return 1;
 	}
 
+	// reads an array
 	sizediff_t readArrayImpl()
 	{
 		oa.put1(0x09);
@@ -302,6 +371,7 @@ package struct JsonParser(bool includingN = true, Chunks)
 		return len + 5;
 	}
 
+	// reads an object
 	sizediff_t readObjectImpl()
 	{
 		oa.put1(0x0A);
