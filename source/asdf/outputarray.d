@@ -3,6 +3,12 @@ module asdf.outputarray;
 import asdf.asdf;
 
 version(X86)
+	version = X86_Any;
+
+version(X86_64)
+	version = X86_Any;
+
+version(X86_Any)
 	version = GeneralUnaligned;
 
 package struct OutputArray

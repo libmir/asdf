@@ -19,6 +19,11 @@ import std.exception;
 import std.range.primitives;
 import std.typecons;
 
+version(X86)
+	version = X86_Any;
+
+version(X86_64)
+	version = X86_Any;
 struct Asdf
 {
 	ubyte[] data;
@@ -281,8 +286,11 @@ struct Asdf
 
 	private size_t length4() const @property
 	{
-		enforce(data.length >= 5);
-		return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
+		enforce!AsdfException(data.length >= 5);
+		version(X86_Any)
+			return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
+		else
+			static assert(0, "not implemented.");
 	}
 }
 
