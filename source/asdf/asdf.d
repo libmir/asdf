@@ -24,36 +24,47 @@ version(X86)
 
 version(X86_64)
 	version = X86_Any;
+
+///
+class AsdfException: Exception
+{
+	///
+	this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null) pure nothrow @nogc @safe 
+	{
+		super(msg, file, line, next);
+	}
+}
+
 struct Asdf
 {
 	ubyte[] data;
 
 	void toString(Dg)(scope Dg sink)
 	{
-		enforce(data.length);
+		enforce!AsdfException(data.length);
 		auto t = data[0];
 		switch(t)
 		{
 			case 0x00:
-				enforce(data.length == 1);
+				enforce!AsdfException(data.length == 1);
 				sink("null");
 				break;
 			case 0x01:
-				enforce(data.length == 1);
+				enforce!AsdfException(data.length == 1);
 				sink("true");
 				break;
 			case 0x02:
-				enforce(data.length == 1);
+				enforce!AsdfException(data.length == 1);
 				sink("false");
 				break;
 			case 0x03:
-				enforce(data.length > 1);
+				enforce!AsdfException(data.length > 1);
 				size_t length = data[1];
-				enforce(data.length == length + 2);
+				enforce!AsdfException(data.length == length + 2);
 				sink(cast(string) data[2 .. $]);
 				break;
 			case 0x05:
-				enforce(data.length == length4 + 5);
+				enforce!AsdfException(data.length == length4 + 5);
 				sink("\"");
 				sink(cast(string) data[5 .. $]);
 				sink("\"");
@@ -97,7 +108,7 @@ struct Asdf
 				sink("}");
 				break;
 			default:
-				enforce(0);
+				enforce!AsdfException(0);
 		}
 	}
 
@@ -118,8 +129,8 @@ struct Asdf
 
 	auto byElement()
 	{
-		enforce(length4 == data.length - 5);
-		enforce(data[0] == 0x09);
+		enforce!AsdfException(length4 == data.length - 5);
+		enforce!AsdfException(data[0] == 0x09);
 		static struct Range
 		{
 			private ubyte[] _data;
@@ -139,18 +150,18 @@ struct Asdf
 							_data.popFront;
 							return;
 						case 0x03:
-							enforce(_data.length >= 2);
+							enforce!AsdfException(_data.length >= 2);
 							size_t len = _data[1] + 2;
-							enforce(_data.length >= len);
+							enforce!AsdfException(_data.length >= len);
 							_front = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
 						case 0x05:
 						case 0x09:
 						case 0x0A:
-							enforce(_data.length >= 5);
+							enforce!AsdfException(_data.length >= 5);
 							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
-							enforce(_data.length >= len);
+							enforce!AsdfException(_data.length >= len);
 							_front = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
@@ -160,18 +171,18 @@ struct Asdf
 							_data.popFront;
 							continue;
 						case 0x83:
-							enforce(_data.length >= 2);
+							enforce!AsdfException(_data.length >= 2);
 							_data.popFrontExactly(_data[1] + 2);
 							continue;
 						case 0x85:
 						case 0x89:
 						case 0x8A:
-							enforce(_data.length >= 5);
+							enforce!AsdfException(_data.length >= 5);
 							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
-							enforce(0);
+							enforce!AsdfException(0);
 					}
 				}
 				_front = Asdf.init;
@@ -196,8 +207,8 @@ struct Asdf
 
 	auto byKeyValue()
 	{
-		enforce(length4 == data.length - 5);
-		enforce(data[0] == 0x0A);
+		enforce!AsdfException(length4 == data.length - 5);
+		enforce!AsdfException(data[0] == 0x0A);
 		static struct Range
 		{
 			private ubyte[] _data;
@@ -207,10 +218,10 @@ struct Asdf
 			{
 				while(!_data.empty)
 				{
-					enforce(_data.length > 1);
+					enforce!AsdfException(_data.length > 1);
 					size_t l = cast(ubyte) _data[0];
 					_data.popFront;
-					enforce(_data.length >= l);
+					enforce!AsdfException(_data.length >= l);
 					_front.key = cast(const(char)[])_data[0 .. l];
 					_data.popFrontExactly(l);
 					uint c = cast(ubyte) _data.front;
@@ -223,18 +234,18 @@ struct Asdf
 							_data.popFront;
 							return;
 						case 0x03:
-							enforce(_data.length >= 2);
+							enforce!AsdfException(_data.length >= 2);
 							size_t len = _data[1] + 2;
-							enforce(_data.length >= len);
+							enforce!AsdfException(_data.length >= len);
 							_front.value = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
 						case 0x05:
 						case 0x09:
 						case 0x0A:
-							enforce(_data.length >= 5);
+							enforce!AsdfException(_data.length >= 5);
 							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
-							enforce(_data.length >= len);
+							enforce!AsdfException(_data.length >= len);
 							_front.value = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
@@ -244,18 +255,18 @@ struct Asdf
 							_data.popFront;
 							continue;
 						case 0x83:
-							enforce(_data.length >= 2);
+							enforce!AsdfException(_data.length >= 2);
 							_data.popFrontExactly(_data[1] + 2);
 							continue;
 						case 0x85:
 						case 0x89:
 						case 0x8A:
-							enforce(_data.length >= 5);
+							enforce!AsdfException(_data.length >= 5);
 							size_t len = (cast(uint[1])cast(ubyte[4])_data[1 .. 5])[0] + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
-							enforce(0);
+							enforce!AsdfException(0);
 					}
 				}
 				_front = _front.init;
@@ -280,7 +291,7 @@ struct Asdf
 
 	private size_t length1() const @property
 	{
-		enforce(data.length >= 2);
+		enforce!AsdfException(data.length >= 2);
 		return data[1];
 	}
 
