@@ -20,8 +20,8 @@ import asdf.outputarray;
 auto parseJson(bool includingN = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
 {
 	import std.format: format;
-	auto c = AsdfParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
 	import std.conv: ConvException;
+	auto c = JsonParser!(includingN, Chunks)(front, chunks, OutputArray(initLength));
 	auto r = c.readValue;
 	if(r == 0)
 		throw new ConvException("Unexpected end of input");
@@ -37,9 +37,9 @@ auto parseJson(bool includingN = true, Chunks)(Chunks chunks, size_t initLength)
 
 auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
 {
-	static struct LineValue
+	static struct ByLineValue
 	{
-		private AsdfParser!(false, Chunks) asdf;
+		private JsonParser!(false, Chunks) asdf;
 		private bool _empty, _nextEmpty;
 
 		void popFront()
@@ -86,14 +86,14 @@ auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
 			return _empty;
 		}
 	}
-	LineValue ret; 
+	ByLineValue ret; 
 	if(chunks.empty)
 	{
 		ret._empty = ret._nextEmpty = true;
 	}
 	else
 	{
-		ret = LineValue(AsdfParser!(false, Chunks)(chunks.front, chunks, OutputArray(initLength)));
+		ret = ByLineValue(JsonParser!(false, Chunks)(chunks.front, chunks, OutputArray(initLength)));
 		ret.popFront;
 	}
 	return ret;
