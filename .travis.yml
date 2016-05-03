@@ -1,0 +1,32 @@
+sudo: false
+os:
+ - linux
+ - osx
+language: d
+d:
+ - dmd-2.071.0
+ - dmd-2.070.2
+ - dmd-2.069.2
+ - dmd-2.068.2
+ - ldc-1.0.0-alpha1
+ - ldc-0.17.1
+env:
+ - ARCH="x86_64"
+matrix:
+  include:
+    - {os: linux, d: dmd-2.071.0, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: dmd-2.070.2, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: dmd-2.069.2, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: dmd-2.068.2, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-1.0.0-alpha1, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-0.17.1, env: ARCH="x86", addons: {apt: {packages: [[gcc-multilib]]}}}
+branches:
+  only:
+    - master
+script:
+ - echo "$ARCH"
+ - dub test --arch "$ARCH" -b unittest-cov
+ - dub build -c median-filter
+ - dub build -c means-of-columns
+after_success:
+ - bash <(curl -s https://codecov.io/bash)
