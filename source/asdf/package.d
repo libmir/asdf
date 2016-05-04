@@ -20,26 +20,21 @@ module asdf;
 ///
 unittest
 {
-	void filterByLine()
-	{
-		import std.conv;
-		import std.stdio;
-		import std.format;
-		auto values = File("lines.jsonl").byChunk(4096).parseJsonByLine(4096);
-		size_t len, count;
-		FormatSpec!char fmt;
-		auto wr = stdout.lockingTextWriter;
-		foreach(val; values)
-		{
-			len += val.data.length;
-			if(val.getValue(["key"]) == "value")
-			{
-				count++;
-				wr.formatValue(val, fmt);
-				wr.put("\n");
-			}
-		}
-	}
+	import std.stdio;
+	import std.algorithm;
+	import asdf;
+
+	auto val = Asdf("Female");
+	auto count = File("data.jsonl")
+		// Use at least a size of file system block, which is usually equals to 4096 bytes.
+		.byChunk(4096)
+		// Use approximate size of an object.
+		// Size of the internal buffer would be extended automatically
+		.parseJsonByLine(4096)
+		.filter!(object => object
+			.getValue(["gender"]) == val)
+		.count;
+	assert(count == 486);
 }
 
 public import asdf.asdf;

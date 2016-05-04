@@ -45,6 +45,28 @@ struct Asdf
 	+/
 	ubyte[] data;
 
+	/// Creates ASDF using already allocated data
+	this(ubyte[] data)
+	{
+		this.data = data;
+	}
+
+	/// Creates ASDF from a string
+	this(in char[] str)
+	{
+		data = new ubyte[str.length + 5];
+		data[0] = 0x05;
+		length4 = str.length;
+		data[5 .. $] = cast(const(ubyte)[])str;
+	}
+
+	///
+	unittest
+	{
+		assert(Asdf("string") == "string");
+		assert(Asdf("string") != "String");
+	}
+
 	///
 	void toString(Dg)(scope Dg sink)
 	{
@@ -133,6 +155,24 @@ struct Asdf
 	/++
 	`==` operator overloads for `null`
 	+/
+	bool opEquals(in Asdf rhs) const
+	{
+		return data == rhs.data;
+	}
+
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`null`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData == asdfData);
+	}
+
+	/++
+	`==` operator overloads for `null`
+	+/
 	bool opEquals(typeof(null)) const
 	{
 		return data.length == 1 && data[0] == 0;
@@ -189,13 +229,9 @@ struct Asdf
 	/++
 	Returns:
 		input range composed of elements of an array.
-	Throws:
-		$(LREF AsdfException) if values type is not array or plain data is invalid.
 	+/
 	auto byElement()
 	{
-		enforce!AsdfException(length4 == data.length - 5);
-		enforce!AsdfException(data[0] == 0x09);
 		static struct Range
 		{
 			private ubyte[] _data;
@@ -264,6 +300,9 @@ struct Asdf
 				return _front.data.length == 0;
 			}
 		}
+		if(data.empty || data[0] != 0x09)
+			return Range.init;
+		enforce!AsdfException(length4 == data.length - 5);
 		auto ret = Range(data[5 .. $]);
 		if(ret._data.length)
 			ret.popFront;
@@ -274,13 +313,9 @@ struct Asdf
 	Returns:
 		Input range composed of key-value pairs of an object.
 		Elements are type of `Tuple!(const(char)[], "key", Asdf, "value")`.
-	Throws:
-		$(LREF AsdfException) if values type is not object or plain data is invalid.
 	+/
 	auto byKeyValue()
 	{
-		enforce!AsdfException(length4 == data.length - 5);
-		enforce!AsdfException(data[0] == 0x0A);
 		static struct Range
 		{
 			private ubyte[] _data;
@@ -355,6 +390,9 @@ struct Asdf
 				return _front.value.data.length == 0;
 			}
 		}
+		if(data.empty || data[0] != 0x0A)
+			return Range.init;
+		enforce!AsdfException(length4 == data.length - 5);
 		auto ret = Range(data[5 .. $]);
 		if(ret._data.length)
 			ret.popFront;
@@ -374,6 +412,16 @@ struct Asdf
 		enforce!AsdfException(data.length >= 5);
 		version(X86_Any)
 			return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
+		else
+			static assert(0, "not implemented.");
+	}
+
+	void length4(size_t len) const @property
+	{
+		assert(data.length >= 5);
+		assert(len <= uint.max);
+		version(X86_Any)
+			(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
 		else
 			static assert(0, "not implemented.");
 	}
