@@ -78,6 +78,7 @@ unittest
 
 /++
 Parses JSON value in each line.
+ASDF value has empty data for invalid lines.
 Params:
 	chunks = input range composed of elements type of `const(ubyte)[]`.
 		`chunks` can use the same buffer for each chunk.
