@@ -29,7 +29,46 @@ version(X86_64)
 class AsdfException: Exception
 {
 	///
-	this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null) pure nothrow @nogc @safe 
+	this(
+		string msg,
+		string file = __FILE__,
+		size_t line = __LINE__,
+		Throwable next = null) pure nothrow @nogc @safe 
+	{
+		super(msg, file, line, next);
+	}
+}
+
+///
+class InvalidAsdfException: AsdfException
+{
+	///
+	this(
+		uint kind,
+		string file = __FILE__,
+		size_t line = __LINE__,
+		Throwable next = null) pure nothrow @safe 
+	{
+		import std.conv: text;
+		super(text("ASDF values is invalid for kind = ", kind), file, line, next);
+	}
+}
+
+private void enforceValidAsdf(bool condition, uint kind)
+{
+	if(!condition)
+		throw new InvalidAsdfException(kind);
+}
+
+///
+class EmptyAsdfException: AsdfException
+{
+	///
+	this(
+		string msg = "ASDF values is empty",
+		string file = __FILE__,
+		size_t line = __LINE__,
+		Throwable next = null) pure nothrow @nogc @safe 
 	{
 		super(msg, file, line, next);
 	}
@@ -40,6 +79,17 @@ The structure for ASDF manipulation.
 +/
 struct Asdf
 {
+	enum Kind : ubyte
+	{
+		null_  = 0x00,
+		true_  = 0x01,
+		false_ = 0x02,
+		number = 0x03,
+		string = 0x05,
+		array  = 0x09,
+		object = 0x0A,
+	}
+
 	/++
 	Plain ASDF data.
 	+/
@@ -55,7 +105,7 @@ struct Asdf
 	this(in char[] str)
 	{
 		data = new ubyte[str.length + 5];
-		data[0] = 0x05;
+		data[0] = Kind.string;
 		length4 = str.length;
 		data[5 .. $] = cast(const(ubyte)[])str;
 	}
@@ -70,35 +120,36 @@ struct Asdf
 	///
 	void toString(Dg)(scope Dg sink)
 	{
-		enforce!AsdfException(data.length);
+		enforce!EmptyAsdfException(data.length);
 		auto t = data[0];
 		switch(t)
 		{
-			case 0x00:
-				enforce!AsdfException(data.length == 1);
+			case Kind.null_:
+				enforceValidAsdf(data.length == 1, t);
 				sink("null");
 				break;
-			case 0x01:
-				enforce!AsdfException(data.length == 1);
+			case Kind.true_:
+				enforceValidAsdf(data.length == 1, t);
 				sink("true");
 				break;
-			case 0x02:
-				enforce!AsdfException(data.length == 1);
+			case Kind.false_:
+				enforceValidAsdf(data.length == 1, t);
 				sink("false");
 				break;
-			case 0x03:
-				enforce!AsdfException(data.length > 1);
+			case Kind.number:
+				enforceValidAsdf(data.length > 1, t);
 				size_t length = data[1];
-				enforce!AsdfException(data.length == length + 2);
+				enforceValidAsdf(data.length == length + 2, t);
 				sink(cast(string) data[2 .. $]);
 				break;
-			case 0x05:
-				enforce!AsdfException(data.length == length4 + 5);
+			case Kind.string:
+				enforceValidAsdf(data.length >= 5, Kind.object);
+				enforceValidAsdf(data.length == length4 + 5, t);
 				sink("\"");
 				sink(cast(string) data[5 .. $]);
 				sink("\"");
 				break;
-			case 0x09:
+			case Kind.array:
 				auto elems = byElement;
 				if(byElement.empty)
 				{
@@ -115,7 +166,7 @@ struct Asdf
 				}
 				sink("]");
 				break;
-			case 0x0A:
+			case Kind.object:
 				auto pairs = byKeyValue;
 				if(byKeyValue.empty)
 				{
@@ -137,7 +188,7 @@ struct Asdf
 				sink("}");
 				break;
 			default:
-				enforce!AsdfException(0);
+				enforceValidAsdf(0, t);
 		}
 	}
 
@@ -193,7 +244,7 @@ struct Asdf
 	+/
 	bool opEquals(bool boolean) const
 	{
-		return data.length == 1 && (data[0] == 0x01 && boolean || data[0] == 0x02 && !boolean);
+		return data.length == 1 && (data[0] == Kind.true_ && boolean || data[0] == Kind.false_ && !boolean);
 	}
 
 	///
@@ -212,7 +263,7 @@ struct Asdf
 	+/
 	bool opEquals(in char[] str) const
 	{
-		return data.length >= 5 && data[0] == 0x05 && data[5 .. 5 + length4] == cast(const(ubyte)[]) str;
+		return data.length >= 5 && data[0] == Kind.string && data[5 .. 5 + length4] == cast(const(ubyte)[]) str;
 	}
 
 	///
@@ -241,49 +292,49 @@ struct Asdf
 			{
 				while(!_data.empty)
 				{
-					uint c = cast(ubyte) _data.front;
-					switch(c)
+					uint t = cast(ubyte) _data.front;
+					switch(t)
 					{
-						case 0x00:
-						case 0x01:
-						case 0x02:
+						case Kind.null_:
+						case Kind.true_:
+						case Kind.false_:
 							_front = Asdf(_data[0 .. 1]);
 							_data.popFront;
 							return;
-						case 0x03:
-							enforce!AsdfException(_data.length >= 2);
+						case Kind.number:
+							enforceValidAsdf(_data.length >= 2, t);
 							size_t len = _data[1] + 2;
-							enforce!AsdfException(_data.length >= len);
+							enforceValidAsdf(_data.length >= len, t);
 							_front = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
-						case 0x05:
-						case 0x09:
-						case 0x0A:
-							enforce!AsdfException(_data.length >= 5);
+						case Kind.string:
+						case Kind.array:
+						case Kind.object:
+							enforceValidAsdf(_data.length >= 5, t);
 							size_t len = Asdf(_data).length4 + 5;
-							enforce!AsdfException(_data.length >= len);
+							enforceValidAsdf(_data.length >= len, t);
 							_front = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
-						case 0x80:
-						case 0x81:
-						case 0x82:
+						case 0x80 | Kind.null_:
+						case 0x80 | Kind.true_:
+						case 0x80 | Kind.false_:
 							_data.popFront;
 							continue;
-						case 0x83:
-							enforce!AsdfException(_data.length >= 2);
+						case 0x80 | Kind.number:
+							enforceValidAsdf(_data.length >= 2, t);
 							_data.popFrontExactly(_data[1] + 2);
 							continue;
-						case 0x85:
-						case 0x89:
-						case 0x8A:
-							enforce!AsdfException(_data.length >= 5);
+						case 0x80 | Kind.string:
+						case 0x80 | Kind.array:
+						case 0x80 | Kind.object:
+							enforceValidAsdf(_data.length >= 5, t);
 							size_t len = Asdf(_data).length4 + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
-							enforce!AsdfException(0);
+							enforceValidAsdf(0, t);
 					}
 				}
 				_front = Asdf.init;
@@ -300,9 +351,10 @@ struct Asdf
 				return _front.data.length == 0;
 			}
 		}
-		if(data.empty || data[0] != 0x09)
+		if(data.empty || data[0] != Kind.array)
 			return Range.init;
-		enforce!AsdfException(length4 == data.length - 5);
+		enforceValidAsdf(data.length >= 5, Kind.array);
+		enforceValidAsdf(length4 == data.length - 5, Kind.array);
 		auto ret = Range(data[5 .. $]);
 		if(ret._data.length)
 			ret.popFront;
@@ -325,55 +377,55 @@ struct Asdf
 			{
 				while(!_data.empty)
 				{
-					enforce!AsdfException(_data.length > 1);
+					enforceValidAsdf(_data.length > 1, Kind.object);
 					size_t l = cast(ubyte) _data[0];
 					_data.popFront;
-					enforce!AsdfException(_data.length >= l);
+					enforceValidAsdf(_data.length >= l, Kind.object);
 					_front.key = cast(const(char)[])_data[0 .. l];
 					_data.popFrontExactly(l);
-					uint c = cast(ubyte) _data.front;
-					switch(c)
+					uint t = cast(ubyte) _data.front;
+					switch(t)
 					{
-						case 0x00:
-						case 0x01:
-						case 0x02:
+						case Kind.null_:
+						case Kind.true_:
+						case Kind.false_:
 							_front.value = Asdf(_data[0 .. 1]);
 							_data.popFront;
 							return;
-						case 0x03:
-							enforce!AsdfException(_data.length >= 2);
+						case Kind.number:
+							enforceValidAsdf(_data.length >= 2, t);
 							size_t len = _data[1] + 2;
-							enforce!AsdfException(_data.length >= len);
+							enforceValidAsdf(_data.length >= len, t);
 							_front.value = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
-						case 0x05:
-						case 0x09:
-						case 0x0A:
-							enforce!AsdfException(_data.length >= 5);
+						case Kind.string:
+						case Kind.array:
+						case Kind.object:
+							enforceValidAsdf(_data.length >= 5, t);
 							size_t len = Asdf(_data).length4 + 5;
-							enforce!AsdfException(_data.length >= len);
+							enforceValidAsdf(_data.length >= len, t);
 							_front.value = Asdf(_data[0 .. len]);
 							_data = _data[len .. $];
 							return;
-						case 0x80:
-						case 0x81:
-						case 0x82:
+						case 0x80 | Kind.null_:
+						case 0x80 | Kind.true_:
+						case 0x80 | Kind.false_:
 							_data.popFront;
 							continue;
-						case 0x83:
-							enforce!AsdfException(_data.length >= 2);
+						case 0x80 | Kind.number:
+							enforceValidAsdf(_data.length >= 2, t);
 							_data.popFrontExactly(_data[1] + 2);
 							continue;
-						case 0x85:
-						case 0x89:
-						case 0x8A:
-							enforce!AsdfException(_data.length >= 5);
+						case 0x80 | Kind.string:
+						case 0x80 | Kind.array:
+						case 0x80 | Kind.object:
+							enforceValidAsdf(_data.length >= 5, t);
 							size_t len = Asdf(_data).length4 + 5;
 							_data.popFrontExactly(len);
 							continue;
 						default:
-							enforce!AsdfException(0);
+							enforceValidAsdf(0, t);
 					}
 				}
 				_front = _front.init;
@@ -390,26 +442,20 @@ struct Asdf
 				return _front.value.data.length == 0;
 			}
 		}
-		if(data.empty || data[0] != 0x0A)
+		if(data.empty || data[0] != Kind.object)
 			return Range.init;
-		enforce!AsdfException(length4 == data.length - 5);
+		enforceValidAsdf(data.length >= 5, Kind.object);
+		enforceValidAsdf(length4 == data.length - 5, Kind.object);
 		auto ret = Range(data[5 .. $]);
 		if(ret._data.length)
 			ret.popFront;
 		return ret;
 	}
 
-	/// returns 1-byte length
-	private size_t length1() const @property
-	{
-		enforce!AsdfException(data.length >= 2);
-		return data[1];
-	}
-
 	/// returns 4-byte length
 	private size_t length4() const @property
 	{
-		enforce!AsdfException(data.length >= 5);
+		assert(data.length >= 5);
 		version(X86_Any)
 			return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
 		else
@@ -443,7 +489,7 @@ Asdf getValue(Range)(Asdf asdf, Range keys)
 		return Asdf.init;
 	L: foreach(key; keys)
 	{
-		if(asdf.data[0] != 0x0A)
+		if(asdf.data[0] != Asdf.Kind.object)
 			return Asdf.init;
 		foreach(e; asdf.byKeyValue)
 		{

@@ -237,11 +237,11 @@ package struct JsonParser(bool includingNewLine = true, Chunks)
 	sizediff_t readValue()
 	{
 		int c = skipSpaces;
-		switch(c)
+		with(Asdf.Kind) switch(c)
 		{
-			case 'n': return readWord!("ull" , 0x00);
-			case 't': return readWord!("rue" , 0x01);
-			case 'f': return readWord!("alse", 0x02);
+			case 'n': return readWord!("ull" , null_);
+			case 't': return readWord!("rue" , true_);
+			case 'f': return readWord!("alse", false_);
 			case '-':
 			case '0':
 			..
@@ -256,7 +256,7 @@ package struct JsonParser(bool includingNewLine = true, Chunks)
 	// reads a string
 	sizediff_t readStringImpl()
 	{
-		oa.put1(0x05);
+		oa.put1(Asdf.Kind.string);
 		auto s = oa.skip(4);
 		uint len;
 		int prev;
@@ -301,7 +301,7 @@ package struct JsonParser(bool includingNewLine = true, Chunks)
 	// reads a number
 	sizediff_t readNumberImpl(ubyte c)
 	{
-		oa.put1(0x03);
+		oa.put1(Asdf.Kind.number);
 		auto s = oa.skip(1);
 		uint len = 1;
 		oa.put1(c);
@@ -346,7 +346,7 @@ package struct JsonParser(bool includingNewLine = true, Chunks)
 	// reads an array
 	sizediff_t readArrayImpl()
 	{
-		oa.put1(0x09);
+		oa.put1(Asdf.Kind.array);
 		auto s = oa.skip(4);
 		uint len;
 		L: for(;;)
@@ -375,7 +375,7 @@ package struct JsonParser(bool includingNewLine = true, Chunks)
 	// reads an object
 	sizediff_t readObjectImpl()
 	{
-		oa.put1(0x0A);
+		oa.put1(Asdf.Kind.object);
 		auto s = oa.skip(4);
 		uint len;
 		L: for(;;)
