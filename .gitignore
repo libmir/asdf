@@ -17,3 +17,5 @@ libasdf.a
 example/filter_and_arrays/filter_and_arrays
 
 examples/filter_and_arrays/filter_and_arrays
+
+examples/arrays_count/arrays_count

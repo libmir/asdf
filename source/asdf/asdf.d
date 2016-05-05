@@ -288,6 +288,11 @@ struct Asdf
 			private ubyte[] _data;
 			private Asdf _front;
 
+			auto save() @property
+			{
+				return this;
+			}
+
 			void popFront()
 			{
 				while(!_data.empty)
@@ -372,6 +377,11 @@ struct Asdf
 		{
 			private ubyte[] _data;
 			private Tuple!(const(char)[], "key", Asdf, "value") _front;
+
+			auto save() @property
+			{
+				return this;
+			}
 
 			void popFront()
 			{

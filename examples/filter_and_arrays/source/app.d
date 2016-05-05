@@ -2,9 +2,6 @@ import std.algorithm;
 import std.stdio;
 import asdf;
 
-
-//jq 'select(.targetings[] | contains("tadmp5800"))'
-
 void main()
 {
 	auto target = Asdf("red");
