@@ -117,6 +117,25 @@ struct Asdf
 		assert(Asdf("string") != "String");
 	}
 
+	/// Sets deleted bit on
+	void remove()
+	{
+		if(data.length)
+			data[0] |= 0x80;
+	}
+
+	///
+	unittest
+	{
+		import std.conv: to;
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		asdfData.getValue(["inner", "d"]).remove;
+		assert(asdfData.to!string == `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","e":{}}}`);
+	}
+
 	///
 	void toString(Dg)(scope Dg sink)
 	{
