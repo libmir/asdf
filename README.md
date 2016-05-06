@@ -4,3 +4,5 @@
 [![Build Status](https://travis-ci.org/tamediadigital/asdf.svg?branch=master)](https://travis-ci.org/tamediadigital/asdf)
 
 # A Simple Document Format
+
+See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPECIFICATION.md).
