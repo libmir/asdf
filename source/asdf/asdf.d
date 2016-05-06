@@ -150,10 +150,14 @@ struct Asdf
 				sink("\"");
 				break;
 			default:
+				// Uses internal buffer for object and arrays.
+				// This makes formatting 3-4 times faster.
 				static struct Buffer
 				{
 					Dg sink;
+					// current buffer length
 					size_t length;
+
 					char[4096] buffer;
 
 					void put(char c)
@@ -166,6 +170,9 @@ struct Asdf
 						buffer[length++] = c;
 					}
 
+					/+
+					Uses compile time loop for values `null`, `true`, `false`
+					+/
 					void put(string str)()
 					{
 						size_t newLength = length + str.length;
@@ -176,11 +183,18 @@ struct Asdf
 							newLength = str.length;
 						}
 						import asdf.utility;
+						// compile time loop
 						foreach(i; Iota!(0, str.length))
 							buffer[length + i] = str[i];
 						length = newLength;
 					}
 
+					/+
+					Params:
+						small = if string length less or equal 255.
+							Keys and numbers have small lengths.
+						str = string to write
+					+/
 					void put(bool small = false)(in char[] str)
 					{
 						size_t newLength = length + str.length;
@@ -202,6 +216,9 @@ struct Asdf
 						length = newLength;
 					}
 
+					/+
+					Sends to `sink` remaining data.
+					+/
 					void flush()
 					{
 						sink(buffer[0 .. length]);
@@ -214,6 +231,11 @@ struct Asdf
 		}
 	}
 
+	/+
+	Internal recursive toString implementation.
+	Params:
+		sink = output range that accepts `char`, `in char[]` and compile time string `(string str)()`
+	+/
 	private void toStringImpl(Buffer)(ref Buffer sink)
 	{
 		enforce!EmptyAsdfException(data.length);
