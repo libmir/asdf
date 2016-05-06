@@ -149,43 +149,139 @@ struct Asdf
 				sink(cast(string) data[5 .. $]);
 				sink("\"");
 				break;
+			default:
+				static struct Buffer
+				{
+					Dg sink;
+					size_t length;
+					char[4096] buffer;
+
+					void put(char c)
+					{
+						if(length == buffer.length)
+						{
+							sink(buffer[0 .. length]);
+							length = 0;
+						}
+						buffer[length++] = c;
+					}
+
+					void put(string str)()
+					{
+						size_t newLength = length + str.length;
+						if(newLength > buffer.length)
+						{
+							sink(buffer[0 .. length]);
+							length = 0;
+							newLength = str.length;
+						}
+						import asdf.utility;
+						foreach(i; Iota!(0, str.length))
+							buffer[length + i] = str[i];
+						length = newLength;
+					}
+
+					void put(bool small = false)(in char[] str)
+					{
+						size_t newLength = length + str.length;
+						if(newLength > buffer.length)
+						{
+							sink(buffer[0 .. length]);
+							length = 0;
+							newLength = str.length;
+							static if(!small)
+							{
+								if(str.length > buffer.length)
+								{
+									sink(str);
+									return;
+								}
+							}
+						}
+						buffer[length .. newLength] = str;
+						length = newLength;
+					}
+
+					void flush()
+					{
+						sink(buffer[0 .. length]);
+						length = 0;
+					}
+				}
+				scope buffer = Buffer(sink);
+				toStringImpl!Buffer(buffer);
+				buffer.flush;
+		}
+	}
+
+	private void toStringImpl(Buffer)(ref Buffer sink)
+	{
+		enforce!EmptyAsdfException(data.length);
+		auto t = data[0];
+		switch(t)
+		{
+			case Kind.null_:
+				enforceValidAsdf(data.length == 1, t);
+				sink.put!"null";
+				break;
+			case Kind.true_:
+				enforceValidAsdf(data.length == 1, t);
+				sink.put!"true";
+				break;
+			case Kind.false_:
+				enforceValidAsdf(data.length == 1, t);
+				sink.put!"false";
+				break;
+			case Kind.number:
+				enforceValidAsdf(data.length > 1, t);
+				size_t length = data[1];
+				enforceValidAsdf(data.length == length + 2, t);
+				sink.put(cast(string) data[2 .. $]);
+				break;
+			case Kind.string:
+				enforceValidAsdf(data.length >= 5, Kind.object);
+				enforceValidAsdf(data.length == length4 + 5, t);
+				sink.put('"');
+				sink.put!true(cast(string) data[5 .. $]);
+				sink.put('"');
+				break;
 			case Kind.array:
 				auto elems = byElement;
 				if(byElement.empty)
 				{
-					sink("[]");
+					sink.put!"[]";
 					break;
 				}
-				sink("[");
-				elems.front.toString(sink);
+				sink.put('[');
+				elems.front.toStringImpl(sink);
 				elems.popFront;
 				foreach(e; elems)
 				{
-					sink(",");
-					e.toString(sink);
+					sink.put(',');
+					e.toStringImpl(sink);
 				}
-				sink("]");
+				sink.put(']');
 				break;
 			case Kind.object:
 				auto pairs = byKeyValue;
 				if(byKeyValue.empty)
 				{
-					sink("{}");
+					sink.put!"{}";
 					break;
 				}
-				sink("{\"");
-				sink(pairs.front.key);
-				sink("\":");
-				pairs.front.value.toString(sink);
+				sink.put!"{\"";
+				sink.put!true(pairs.front.key);
+				sink.put!"\":";
+				pairs.front.value.toStringImpl(sink);
 				pairs.popFront;
 				foreach(e; pairs)
 				{
-					sink(",\"");
-					sink(e.key);
-					sink("\":");
-					e.value.toString(sink);
+					sink.put!",\"";
+					sink.put!true(e.key);
+					sink.put!"\":";
+					e.value.toStringImpl(sink);
 				}
-				sink("}");
+				sink.put('}');
 				break;
 			default:
 				enforceValidAsdf(0, t);
