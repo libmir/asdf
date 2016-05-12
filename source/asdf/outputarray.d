@@ -2,47 +2,53 @@ module asdf.outputarray;
 
 import asdf.asdf;
 
-version(X86)
-	version = X86_Any;
-
-version(X86_64)
-	version = X86_Any;
-
-version(X86_Any)
-	version = GeneralUnaligned;
-
 package struct OutputArray
 {
 	import std.experimental.allocator;
 	import std.experimental.allocator.gc_allocator;
 
-	ubyte[] array;
+	ubyte[] data;
 	size_t shift;
 
 	auto result()
 	{
-		return Asdf(array[0 .. shift]);
+		return Asdf(data[0 .. shift]);
 	}
 
 	this(size_t initialLength)
 	{
 		assert(initialLength >= 32);
-		array = cast(ubyte[]) GCAllocator.instance.allocate(GCAllocator.instance.goodAllocSize(initialLength));
+		data = cast(ubyte[]) GCAllocator.instance.allocate(GCAllocator.instance.goodAllocSize(initialLength));
 	}
 
 	size_t skip(size_t len)
 	{
 		auto ret = shift;
 		shift += len;
-		if(shift > array.length)
+		if(shift > data.length)
 			extend;
 		return ret;
+	}
+
+	void put(in char[] str)
+	{
+		size_t newShift = shift + str.length;
+		if(newShift < data.length)
+			extend(str.length);
+		data[shift .. newShift] = cast(ubyte[])str;
+		assert(newShift > shift);
+		shift = newShift;
 	}
 
 	void put1(ubyte b)
 	{
 		put1(b, shift);
 		shift += 1;
+	}
+
+	void put(char b)
+	{
+		put1(cast(ubyte)b);
 	}
 
 	void put4(uint b)
@@ -59,53 +65,35 @@ package struct OutputArray
 
 	void put1(ubyte b, size_t sh)
 	{
-		assert(sh <= array.length);
-		if(sh == array.length)
+		assert(sh <= data.length);
+		if(sh == data.length)
 			extend;
-		array[sh] = b;
+		data[sh] = b;
 	}
 
 	void put4(uint b, size_t sh)
 	{
 		immutable newShift = sh + 4;
-		if(newShift > array.length)
+		if(newShift > data.length)
 			extend;
 
-		version(GeneralUnaligned)
-		{
-			*cast(uint*) (array.ptr + sh) = b;
-		}
-		else
-		version(LittleEndian)
-		{
-			array[sh + 0] = cast(ubyte) (b >> 0x00u);
-			array[sh + 1] = cast(ubyte) (b >> 0x08u);
-			array[sh + 2] = cast(ubyte) (b >> 0x10u);
-			array[sh + 3] = cast(ubyte) (b >> 0x18u);
-		}
-		else
-		{
-			array[sh + 0] = cast(ubyte) (b >> 0x18u);
-			array[sh + 1] = cast(ubyte) (b >> 0x10u);
-			array[sh + 2] = cast(ubyte) (b >> 0x08u);
-			array[sh + 3] = cast(ubyte) (b >> 0x00u);
-		}
+		*cast(uint*) (data.ptr + sh) = b;
 	}
 
 	version(SSE42)
 	void put16(ubyte16 b, size_t len)
 	{
-		if(shift + 16 > array.length)
+		if(shift + 16 > data.length)
 			extend;
-		__builtin_ia32_storedqu(array.ptr, b);
+		__builtin_ia32_storedqu(data.ptr, b);
 		shift += len;
 	}
 
-	private void extend()
+	private void extend(size_t add = 0)
 	{
-		size_t length = array.length * 2;
-		void[] t = array;
-		GCAllocator.instance.reallocate(t, array.length * 2);
-		array = cast(ubyte[])t;
+		size_t length = (data.length) * 2 + add;
+		void[] t = data;
+		GCAllocator.instance.reallocate(t, length);
+		data = cast(ubyte[])t;
 	}
 }

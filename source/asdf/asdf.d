@@ -54,10 +54,14 @@ class InvalidAsdfException: AsdfException
 	}
 }
 
-private void enforceValidAsdf(bool condition, uint kind)
+private void enforceValidAsdf(
+		bool condition,
+		uint kind,
+		string file = __FILE__,
+		size_t line = __LINE__)
 {
 	if(!condition)
-		throw new InvalidAsdfException(kind);
+		throw new InvalidAsdfException(kind, file, line);
 }
 
 ///
