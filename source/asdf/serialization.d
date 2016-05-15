@@ -239,7 +239,7 @@ unittest
 		ser.putEscapedKey("null");
 		ser.putValue(null);
 	
-		ser.putKey("array");
+		ser.putEscapedKey("array");
 		auto state1 = ser.arrayBegin();
 			ser.elemBegin; ser.putValue(null);
 			ser.elemBegin; ser.putValue(123);
@@ -665,6 +665,24 @@ unittest
 	enum json = `{"time":"2016-Mar-04 00:00:00","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
 	assert(serializeToJson(S(DateTime(2016, 3, 4), new C, [E.a : "A"])) == json);
 	assert(serializeToAsdf(S(DateTime(2016, 3, 4), new C, [E.a : "A"])).to!string == json);
+}
+
+/// Custom serialization
+unittest
+{
+	struct S
+	{
+		void serialize(S)(ref S serializer)
+		{
+			auto state = serializer.objectBegin;
+			serializer.putEscapedKey("foo");
+			serializer.putEscapedStringValue("bar");
+			serializer.objectEnd(state);
+		}
+	}
+	enum json = `{"foo":"bar"}`;
+	assert(serializeToJson(S()) == json);
+	assert(serializeToAsdf(S()).to!string == json);
 }
 
 /// Serialization proxy for aggregation types
