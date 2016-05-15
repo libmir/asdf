@@ -3,6 +3,7 @@ module asdf.serialization;
 import std.traits;
 import std.meta;
 import std.range.primitives;
+import std.functional;
 import std.conv;
 import std.utf;
 import std.format: FormatSpec, formatValue, singleSpec;
@@ -720,11 +721,11 @@ private template getSerializationProxy(alias value)
 private bool isEscapedOut(string type, string member, Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = a =>
+	alias pred = unaryFun!(a =>
 		a.args[0] == "escaped"
 		||
 		a.args[0] == "escaped-out"
-		;
+		);
 	auto c = attrs.count!pred;
 	if(c == 0)
 		return false;
@@ -737,11 +738,11 @@ private bool isEscapedOut(string type, string member, Serialization[] attrs)
 private bool isEscapedIn(string type, string member, Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = a =>
+	alias pred = unaryFun!(a =>
 		a.args[0] == "escaped"
 		||
 		a.args[0] == "escaped-in"
-		;
+		);
 	auto c = attrs.count!pred;
 	if(c == 0)
 		return false;
@@ -754,10 +755,11 @@ private bool isEscapedIn(string type, string member, Serialization[] attrs)
 private string keyOut(string type, string member, Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = a => 
+	alias pred = unaryFun!(a =>
 			a.args[0] == "keys"
 			||
-			a.args[0] == "key-out";
+			a.args[0] == "key-out"
+			);
 	auto c = attrs.count!pred;
 	if(c == 0)
 		return member;
