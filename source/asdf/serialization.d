@@ -10,42 +10,27 @@ import std.format: FormatSpec, formatValue, singleSpec;
 import std.bigint: BigInt;
 import asdf.asdf;
 
-private void putCommonString(Appender)(auto ref Appender app, in char[] str)
+///
+class DeserializationException: AsdfException
 {
-	foreach(ref e; str)
+	///
+	ubyte kind;
+
+	///
+	string func;
+
+	///
+	this(
+		ubyte kind,
+		string msg = "Unexpected ASDF kind",
+		string func = __PRETTY_FUNCTION__,
+		string file = __FILE__,
+		size_t line = __LINE__,
+		Throwable next = null) pure nothrow @nogc @safe 
 	{
-		if(e < ' ')
-		{
-			app.put('\\');
-			switch(e)
-			{
-				case '\t':
-					app.put('t');
-					continue;
-				case '\r':
-					app.put('r');
-					continue;
-				case '\n':
-					app.put('n');
-					continue;
-				default:
-					import std.format: format;
-					throw new UTFException(format("unexpected char \\x%X", e));
-			}
-		}
-		if(e == '\\')
-		{
-			app.put('\\');
-			app.put('\\');
-			continue;
-		}
-		if(e == '\"')
-		{
-			app.put('\\');
-			app.put('\"');
-			continue;
-		}
-		app.put(e);
+		this.kind = kind;
+		this.func = func;
+		super(msg, file, line, next);
 	}
 }
 
@@ -740,29 +725,6 @@ unittest
 	assert(serializeToAsdf(S()).to!string == json);
 }
 
-///
-class DeserializationException: AsdfException
-{
-	///
-	ubyte kind;
-
-	///
-	string func;
-
-	///
-	this(
-		ubyte kind,
-		string msg = "Unexpected ASDF kind",
-		string func = __PRETTY_FUNCTION__,
-		string file = __FILE__,
-		size_t line = __LINE__,
-		Throwable next = null) pure nothrow @nogc @safe 
-	{
-		this.kind = kind;
-		this.func = func;
-		super(msg, file, line, next);
-	}
-}
 
 /// Deserialize `null` value
 void deserializeValue(Asdf data, typeof(null))
@@ -1094,4 +1056,43 @@ private bool ignoreIn(Serialization[] attrs)
 			||
 			a.args == ["ignore-out"]
 			);
+}
+
+private void putCommonString(Appender)(auto ref Appender app, in char[] str)
+{
+	foreach(ref e; str)
+	{
+		if(e < ' ')
+		{
+			app.put('\\');
+			switch(e)
+			{
+				case '\t':
+					app.put('t');
+					continue;
+				case '\r':
+					app.put('r');
+					continue;
+				case '\n':
+					app.put('n');
+					continue;
+				default:
+					import std.format: format;
+					throw new UTFException(format("unexpected char \\x%X", e));
+			}
+		}
+		if(e == '\\')
+		{
+			app.put('\\');
+			app.put('\\');
+			continue;
+		}
+		if(e == '\"')
+		{
+			app.put('\\');
+			app.put('\"');
+			continue;
+		}
+		app.put(e);
+	}
 }
