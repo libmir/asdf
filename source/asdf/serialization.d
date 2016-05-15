@@ -91,6 +91,54 @@ unittest
 	assert(serializeToAsdf(S("str", 4)).to!string == `{"foo":"str","bar":4}`);
 }
 
+
+/// Deserialization function
+V deserialize(V)(Asdf data)
+{
+	V value;
+	deserializeValue(data, value);
+	return value;
+}
+
+/// ditto
+V deserialize(V)(string str)
+{
+	import asdf.jsonparser: parseJson;
+	import std.range: only;
+	return (cast(const(ubyte)[]) str).only.parseJson(str.length + 32).deserialize!V;
+}
+
+///
+unittest
+{
+	struct S
+	{
+		string foo;
+		uint bar;
+	}
+
+	assert(deserialize!S(`{"foo":"str","bar":4}`) == S("str", 4));
+}
+
+
+/// Serialization proxy for aggregation types
+struct serializationProxy(T){}
+
+///
+unittest
+{
+	struct S
+	{
+		@serializationProxy!string
+		uint bar;
+	}
+
+	auto json = `{"bar":"4"}`;
+	assert(serializeToJson(S(4)) == json);
+	assert(deserialize!S(json) == S(4));
+}
+
+
 /// JSON serialization back-end
 struct JsonSerializer(Buffer)
 	if (isOutputRange!(Buffer, char))
@@ -570,7 +618,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		auto state = serializer.objectBegin();
 		foreach(member; __traits(allMembers, V))
 		{
-			static if(__traits(compiles, serializer.serializeValue(__traits(getMember, value, member))))
+			static if(__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
@@ -592,6 +640,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 
 					}
 					else
+					static if(__traits(compiles, serializer.serializeValue(__traits(getMember, value, member))))
 					{
 						static if (is(typeof(__traits(getMember, value, member)) : const(char)[])
 							&& isEscapedOut(S.stringof, member, udas))
@@ -627,11 +676,12 @@ unittest
 	static interface I
 	{
 		double foo() @property;
+		void foo(double) @property;
 	}
 
 	static class C : I
 	{
-		private uint _foo;
+		private double _foo;
 
 		this()
 		{
@@ -641,6 +691,11 @@ unittest
 		override double foo() @property
 		{
 			return _foo + 10;
+		}
+
+		override void foo(double d) @property
+		{
+			_foo = d;
 		}
 	}
 
@@ -685,20 +740,237 @@ unittest
 	assert(serializeToAsdf(S()).to!string == json);
 }
 
-/// Serialization proxy for aggregation types
-struct serializationProxy(T){}
-
 ///
-unittest
+class DeserializationException: AsdfException
 {
-	struct S
-	{
-		@serializationProxy!string
-		uint bar;
-	}
+	///
+	ubyte kind;
 
-	assert(serializeToJson(S(4)) == `{"bar":"4"}`);
+	///
+	string func;
+
+	///
+	this(
+		ubyte kind,
+		string msg = "Unexpected ASDF kind",
+		string func = __PRETTY_FUNCTION__,
+		string file = __FILE__,
+		size_t line = __LINE__,
+		Throwable next = null) pure nothrow @nogc @safe 
+	{
+		this.kind = kind;
+		this.func = func;
+		super(msg, file, line, next);
+	}
 }
+
+/// Deserialize `null` value
+void deserializeValue(Asdf data, typeof(null))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.null_)
+		throw new DeserializationException(kind);
+}
+
+/// Deserialize boolean value
+void deserializeValue(Asdf data, ref bool value)
+{
+	auto kind = data.kind;
+	with(Asdf.Kind) switch(kind)
+	{
+		case false_:
+			value = false;
+			return;
+		case true_:
+			value = true;
+			return;
+		default:
+			throw new DeserializationException(kind); 
+	}
+}
+
+/// Deserialize numeric value
+void deserializeValue(V)(Asdf data, ref V value)
+	if(isNumeric!V || is(V : BigInt))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.number)
+		throw new DeserializationException(kind);
+	value = (cast(string) data.data[2 .. $]).to!V;
+}
+
+/// Deserialize escaped string value
+void deserializeEscapedString(V)(Asdf data, ref V value)
+	if(is(V : const(char)[]))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.number)
+		throw new DeserializationException(kind);
+	value = cast(V) data.data[5 .. $].dup;
+}
+
+/// Deserialize string value
+void deserializeValue(V)(Asdf data, ref V value)
+	if(is(V : const(char)[]))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.string)
+		throw new DeserializationException(kind);
+	value = cast(V) data.data[5 .. $].dup; // TODO: implement conversion
+}
+
+/// Deserialize array
+void deserializeValue(V : T[], T)(Asdf data, ref V value)
+	if(!isSomeChar!T)
+{
+	import std.algorithm.searching: count;
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.array)
+		throw new DeserializationException(kind);
+	auto elems = data.byElement;
+	value = new T[elems.save.count];
+	foreach(ref e; value)
+	{
+		.deserializeValue(elems.front, e);
+		elems.popFront;
+	}
+	assert(elems.empty);
+}
+
+/// Deserialize static array
+void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
+	if(is(E == enum))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.array)
+		throw new DeserializationException(kind);
+	auto elems = data.byElement;
+	foreach(ref e; value)
+	{
+		if(elems.empty)
+			return;
+		.deserializeValue(elems.front, e);
+		elems.popFront;
+	}
+}
+
+/// Deserialize string-value associative array
+void deserializeValue(V : T[string], T)(Asdf data, ref V value)
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.object)
+		throw new DeserializationException(kind);
+	foreach(ref elem; elvalue.byKeyValue)
+	{
+		T v;
+		.deserializeValue(elem.value, v);
+		value[elem.key.idup] = v;
+		.deserializeValue(elems.front, e);
+	}
+	assert(elems.empty);
+}
+
+/// Deserialize enumeration-value associative array
+void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
+	if(is(E == enum))
+{
+	auto kind = data.kind;
+	if(kind != Asdf.Kind.object)
+		throw new DeserializationException(kind);
+	foreach(ref elem; elvalue.byKeyValue)
+	{
+		T v;
+		.deserializeValue(elem.value, v);
+		value[elem.key.to!E] = v;
+		.deserializeValue(elems.front, e);
+	}
+	assert(elems.empty);
+}
+
+/// Deserialize aggregate value
+void deserializeValue(V)(Asdf data, ref V value)
+	if(isAggregateType!V && !is(V : BigInt))
+{
+	static if(__traits(compiles, {value = V.deserialize(data);}))
+	{
+		value = V.deserialize(data);
+	}
+	else
+	{
+		auto kind = data.kind;
+		if(kind != Asdf.Kind.object)
+		{
+			throw new DeserializationException(kind);
+		}
+		static if(is(V == class) || is(V == interface))
+		{
+			if(value is null)
+			{
+				static if(__traits(compiles, {value = new V;}))
+				{
+					value = new V;
+				}
+				else
+				{
+					throw new DeserializationException(data.kind, "Object / interface must not be null");
+				}
+			}
+		}
+		foreach(elem; data.byKeyValue)
+		{
+			switch(elem.key)
+			{
+				foreach(member; __traits(allMembers, V))
+				{
+					static if(__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
+					{
+						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
+						static if(!ignoreIn(udas))
+						{
+							enum keys = keysIn(V.stringof, member, udas);
+							foreach (key; aliasSeqOf!keys)
+							{
+				case key:
+
+							}
+							alias Type = typeof(__traits(getMember, value, member));
+							alias Fun = Select!(isEscapedIn(V.stringof, member, udas), .deserializeEscapedString, .deserializeValue);
+							static if(hasSerializationProxy!(__traits(getMember, value, member)))
+							{
+								alias Proxy = getSerializationProxy!(__traits(getMember, value, member));
+						
+					Proxy proxy;
+					Fun(elem.value, proxy);
+					__traits(getMember, value, member) = proxy.to!Type;
+
+							}
+							else
+							static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+							{
+
+					Fun(elem.value, __traits(getMember, value, member));
+
+							}
+							else
+							{
+
+					Type val;
+					Fun(elem.value, val);
+					__traits(getMember, value, member) = val;
+
+							}
+
+					break;
+
+						}
+					}
+				}
+				default:
+			}
+		}
+	}
+}
+
 
 private enum bool isSerializationProxy(A) = is(A : serializationProxy!T, T);
 
@@ -785,6 +1057,23 @@ private string keyOut(string type, string member, Serialization[] attrs)
 		return attrs.find!pred.front.args[1];
 	throw new Exception(type ~ "." ~ member ~
 		` : Only single declaration of "keys" / "key-out" serialization attribute is allowed`);
+}
+
+private string[] keysIn(string type, string member, Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind, find, startsWith, count;
+	alias pred = unaryFun!(a =>
+			a.args[0] == "keys"
+			||
+			a.args[0] == "keys-in"
+			);
+	auto c = attrs.count!pred;
+	if(c == 0)
+		return [member];
+	if(c == 1)
+		return attrs.find!pred.front.args[1 .. $];
+	throw new Exception(type ~ "." ~ member ~
+		` : Only single declaration of "keys" / "keys-in" serialization attribute is allowed`);
 }
 
 private bool ignoreOut(Serialization[] attrs)

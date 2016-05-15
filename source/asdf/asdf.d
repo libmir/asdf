@@ -94,6 +94,13 @@ struct Asdf
 		object = 0x0A,
 	}
 
+	/// Returns ASDF Kind
+	ubyte kind()
+	{
+		enforce!EmptyAsdfException(data.length);
+		return data[0];
+	}
+
 	/++
 	Plain ASDF data.
 	+/
@@ -607,20 +614,15 @@ struct Asdf
 	private size_t length4() const @property
 	{
 		assert(data.length >= 5);
-		version(X86_Any)
-			return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
-		else
-			static assert(0, "not implemented.");
+		return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
 	}
 
+	/// ditto
 	void length4(size_t len) const @property
 	{
 		assert(data.length >= 5);
 		assert(len <= uint.max);
-		version(X86_Any)
-			(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
-		else
-			static assert(0, "not implemented.");
+		(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
 	}
 }
 
