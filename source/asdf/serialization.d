@@ -123,6 +123,18 @@ unittest
 	assert(deserialize!S(json) == S(4));
 }
 
+/// Main serialization attribute type
+struct Serialization
+{
+	/// string list
+	string[] args;
+}
+
+/// Returns Serialization with the `args` list.
+Serialization serialization(string[] args...)
+{
+	return Serialization(args.dup);
+}
 
 /// JSON serialization back-end
 struct JsonSerializer(Buffer)
@@ -429,19 +441,6 @@ unittest
 	ser.objectEnd(state0);
 
 	assert(ser.app.result.to!string == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
-}
-
-/// Main serialization attribute type
-struct Serialization
-{
-	/// string list
-	string[] args;
-}
-
-/// Returns Serialization with the `args` list.
-Serialization serialization(string[] args...)
-{
-	return Serialization(args.dup);
 }
 
 /// `null` value serialization
