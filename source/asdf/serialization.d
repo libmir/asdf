@@ -614,6 +614,7 @@ unittest
 {
 	import std.bigint;
 	import std.datetime;
+	import std.conv;
 
 	enum E
 	{
@@ -649,19 +650,20 @@ unittest
 		DateTime time;
 		
 		I object;
-		
+
+		string[E] map;
+
 		@serialization("keys", "bar_common", "bar")
 		string bar = "escaped chars = '\\', '\"', '\t', '\r', '\n'";
 		
 		@serialization("key-out", "bar_escaped")
 		@serialization("escaped")
 		string barEscaped = `escaped chars = '\\', '\"', '\t', '\r', '\n'`;
-
-		string[string] map;
 	}
 
-	assert(serializeToJson(S(DateTime(2016, 3, 4), new C)) ==
-`{"time":"2016-Mar-04 00:00:00","object":{"foo":14},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'","map":null}`);
+	enum json = `{"time":"2016-Mar-04 00:00:00","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+	assert(serializeToJson(S(DateTime(2016, 3, 4), new C, [E.a : "A"])) == json);
+	assert(serializeToAsdf(S(DateTime(2016, 3, 4), new C, [E.a : "A"])).to!string == json);
 }
 
 /// Serialization proxy for aggregation types
