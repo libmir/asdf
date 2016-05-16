@@ -1,4 +1,83 @@
+/++
+$(H3 ASDF Serialization)
++/
 module asdf.serialization;
+
+///
+unittest
+{
+	import std.bigint;
+	import std.datetime;
+	import std.conv;
+
+	enum E
+	{
+		a,
+		b, 
+		c,
+	}
+
+	static class C
+	{
+		private double _foo;
+
+		this()
+		{
+			_foo = 4;
+		}
+
+		double foo() @property
+		{
+			return _foo + 10;
+		}
+
+		void foo(double d) @property
+		{
+			_foo = d - 10;
+		}
+	}
+
+	static struct DateTimeProxy
+	{
+		DateTime datetime;
+		alias datetime this;
+
+		static DateTimeProxy deserialize(Asdf data)
+		{
+			string val;
+			deserializeEscapedString(data, val);
+			return DateTimeProxy(DateTime.fromISOString(val));
+		}
+
+		void serialize(S)(ref S serializer)
+		{
+			serializer.putEscapedStringValue(datetime.toISOString);
+		}
+	}
+
+	static struct S
+	{
+		@serializationProxy!DateTimeProxy
+		DateTime time;
+		
+		C object;
+
+		string[E] map;
+
+		@serialization("keys", "bar_common", "bar")
+		string bar = "escaped chars = '\\', '\"', '\t', '\r', '\n'";
+		
+		@serialization("key-out", "bar_escaped")
+		@serialization("escaped")
+		string barEscaped = `escaped chars = '\\', '\"', '\t', '\r', '\n'`;
+	}
+
+	enum json = `{"time":"20160304T000000","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+	auto value = S(DateTime(2016, 3, 4), new C, [E.a : "A"]);
+	assert(serializeToJson(value) == json);
+	assert(serializeToAsdf(value).to!string == json);
+	assert(deserialize!S(json).serializeToJson == json);
+}
 
 import std.traits;
 import std.meta;
@@ -220,13 +299,6 @@ struct JsonSerializer(Buffer)
 	}
 
 	///ditto
-	void putEscapedStringElem(in char[] str)
-	{
-		incState;
-		putEscapedStringValue(str);
-	}
-
-	///ditto
 	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
 	{
 		app.formatValue(num, fmt);
@@ -358,12 +430,6 @@ struct AsdfSerializer
 		app.put1(Asdf.Kind.string);
 		app.put4(cast(uint)str.length);
 		app.put(str);
-	}
-
-	///ditto
-	void putEscapedStringElem(in char[] str)
-	{
-		putEscapedStringValue(str);
 	}
 
 	///ditto
@@ -602,7 +668,10 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		auto state = serializer.objectBegin();
 		foreach(member; __traits(allMembers, V))
 		{
-			static if(__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
+			static if(
+				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+				&&
+				__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
@@ -643,70 +712,6 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 	}
 }
 
-///
-unittest
-{
-	import std.bigint;
-	import std.datetime;
-	import std.conv;
-
-	enum E
-	{
-		a,
-		b, 
-		c,
-	}
-
-	static interface I
-	{
-		double foo() @property;
-		void foo(double) @property;
-	}
-
-	static class C : I
-	{
-		private double _foo;
-
-		this()
-		{
-			_foo = 4;
-		}
-
-		override double foo() @property
-		{
-			return _foo + 10;
-		}
-
-		override void foo(double d) @property
-		{
-			_foo = d;
-		}
-	}
-
-	static struct S
-	{
-		@serializationProxy!string
-		@serialization("escaped")
-		DateTime time;
-		
-		I object;
-
-		string[E] map;
-
-		@serialization("keys", "bar_common", "bar")
-		string bar = "escaped chars = '\\', '\"', '\t', '\r', '\n'";
-		
-		@serialization("key-out", "bar_escaped")
-		@serialization("escaped")
-		string barEscaped = `escaped chars = '\\', '\"', '\t', '\r', '\n'`;
-	}
-
-	enum json = `{"time":"2016-Mar-04 00:00:00","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
-	assert(serializeToJson(S(DateTime(2016, 3, 4), new C, [E.a : "A"])) == json);
-	assert(serializeToAsdf(S(DateTime(2016, 3, 4), new C, [E.a : "A"])).to!string == json);
-}
-
-/// Custom serialization
 unittest
 {
 	struct S
@@ -733,6 +738,12 @@ void deserializeValue(Asdf data, typeof(null))
 		throw new DeserializationException(kind);
 }
 
+///
+unittest
+{
+	deserializeValue(serializeToAsdf(null), null);
+}
+
 /// Deserialize boolean value
 void deserializeValue(Asdf data, ref bool value)
 {
@@ -750,6 +761,13 @@ void deserializeValue(Asdf data, ref bool value)
 	}
 }
 
+///
+unittest
+{
+	assert(deserialize!bool(serializeToAsdf(true)));
+	assert(deserialize!bool(serializeToJson(true)));
+}
+
 /// Deserialize numeric value
 void deserializeValue(V)(Asdf data, ref V value)
 	if(isNumeric!V || is(V : BigInt))
@@ -760,14 +778,33 @@ void deserializeValue(V)(Asdf data, ref V value)
 	value = (cast(string) data.data[2 .. $]).to!V;
 }
 
+///
+unittest
+{
+	assert(deserialize!ulong (serializeToAsdf(20)) == ulong (20));
+	assert(deserialize!ulong (serializeToJson(20)) == ulong (20));
+	assert(deserialize!double(serializeToAsdf(20)) == double(20));
+	assert(deserialize!double(serializeToJson(20)) == double(20));
+	assert(deserialize!BigInt(serializeToAsdf(20)) == BigInt(20));
+	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
+}
+
 /// Deserialize escaped string value
 void deserializeEscapedString(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.number)
-		throw new DeserializationException(kind);
-	value = cast(V) data.data[5 .. $].dup;
+	with(Asdf.Kind) switch(kind)
+	{
+		case string:
+			value = cast(V) data.data[5 .. $].dup;
+			return;
+		case null_:
+			value = null;
+			return;
+		default:
+			throw new DeserializationException(kind);
+	}
 }
 
 /// Deserialize string value
@@ -775,60 +812,125 @@ void deserializeValue(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.string)
-		throw new DeserializationException(kind);
-	value = cast(V) data.data[5 .. $].dup; // TODO: implement conversion
+	with(Asdf.Kind) switch(kind)
+	{
+		case string:
+			value = cast(V) cast(V) (cast(const(char)[]) data.data[5 .. $]).toCommonString;
+			return;
+		case null_:
+			value = null;
+			return;
+		default:
+			throw new DeserializationException(kind);
+	}
+}
+
+///
+unittest
+{
+	assert(deserialize!string(serializeToJson(null)) is null);
+	assert(deserialize!string(serializeToAsdf(null)) is null);
+	assert(deserialize!string(serializeToJson("\tbar")) == "\tbar");
+	assert(deserialize!string(serializeToAsdf("\"bar")) == "\"bar");
 }
 
 /// Deserialize array
 void deserializeValue(V : T[], T)(Asdf data, ref V value)
-	if(!isSomeChar!T)
+	if(!isSomeChar!T && !isStaticArray!V)
 {
-	import std.algorithm.searching: count;
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.array)
-		throw new DeserializationException(kind);
-	auto elems = data.byElement;
-	value = new T[elems.save.count];
-	foreach(ref e; value)
+	with(Asdf.Kind) switch(kind)
 	{
-		.deserializeValue(elems.front, e);
-		elems.popFront;
+		case array:
+			import std.algorithm.searching: count;
+			auto elems = data.byElement;
+			value = new T[elems.save.count];
+			foreach(ref e; value)
+			{
+				.deserializeValue(elems.front, e);
+				elems.popFront;
+			}
+			assert(elems.empty);
+			return;
+		case null_:
+			value = null;
+			return;
+		default:
+			throw new DeserializationException(kind);
 	}
-	assert(elems.empty);
+}
+
+///
+unittest
+{
+	assert(deserialize!(int[])(serializeToJson(null)) is null);
+	assert(deserialize!(int[])(serializeToAsdf(null)) is null);
+	assert(deserialize!(int[])(serializeToJson([1, 3, 4])) == [1, 3, 4]);
+	assert(deserialize!(int[])(serializeToAsdf([1, 3, 4])) == [1, 3, 4]);
 }
 
 /// Deserialize static array
 void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
-	if(is(E == enum))
 {
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.array)
-		throw new DeserializationException(kind);
-	auto elems = data.byElement;
-	foreach(ref e; value)
+	with(Asdf.Kind) switch(kind)
 	{
-		if(elems.empty)
+		case array:
+			auto elems = data.byElement;
+			foreach(ref e; value)
+			{
+				if(elems.empty)
+					return;
+				.deserializeValue(elems.front, e);
+				elems.popFront;
+			}
 			return;
-		.deserializeValue(elems.front, e);
-		elems.popFront;
+		case null_:
+			return;
+		default:
+			throw new DeserializationException(kind);
 	}
+}
+
+///
+unittest
+{
+	assert(deserialize!(int[4])(serializeToJson(null)) == [0, 0, 0, 0]);
+	assert(deserialize!(int[4])(serializeToAsdf(null)) == [0, 0, 0, 0]);
+	assert(deserialize!(int[4])(serializeToJson([1, 3, 4])) == [1, 3, 4, 0]);
+	assert(deserialize!(int[4])(serializeToAsdf([1, 3, 4])) == [1, 3, 4, 0]);
+	assert(deserialize!(int[2])(serializeToJson([1, 3, 4])) == [1, 3]);
+	assert(deserialize!(int[2])(serializeToAsdf([1, 3, 4])) == [1, 3]);
 }
 
 /// Deserialize string-value associative array
 void deserializeValue(V : T[string], T)(Asdf data, ref V value)
 {
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.object)
-		throw new DeserializationException(kind);
-	foreach(ref elem; elvalue.byKeyValue)
+	with(Asdf.Kind) switch(kind)
 	{
-		T v;
-		.deserializeValue(elem.value, v);
-		value[elem.key.idup] = v;
-		.deserializeValue(elems.front, e);
+		case object:
+			foreach(elem; data.byKeyValue)
+			{
+				T v;
+				.deserializeValue(elem.value, v);
+				value[elem.key.idup] = v;
+			}
+			return;
+		case null_:
+			return;
+		default:
+			throw new DeserializationException(kind);
 	}
-	assert(elems.empty);
+}
+
+///
+unittest
+{
+	assert(deserialize!(int[string])(serializeToJson(null)) is null);
+	assert(deserialize!(int[string])(serializeToAsdf(null)) is null);
+	assert(deserialize!(int[string])(serializeToJson(["a" : 1, "b" : 2])) == ["a" : 1, "b" : 2]);
+	assert(deserialize!(int[string])(serializeToAsdf(["a" : 1, "b" : 2])) == ["a" : 1, "b" : 2]);
 }
 
 /// Deserialize enumeration-value associative array
@@ -836,16 +938,31 @@ void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
 	if(is(E == enum))
 {
 	auto kind = data.kind;
-	if(kind != Asdf.Kind.object)
-		throw new DeserializationException(kind);
-	foreach(ref elem; elvalue.byKeyValue)
+	with(Asdf.Kind) switch(kind)
 	{
-		T v;
-		.deserializeValue(elem.value, v);
-		value[elem.key.to!E] = v;
-		.deserializeValue(elems.front, e);
+		case object:
+			foreach(elem; data.byKeyValue)
+			{
+				T v;
+				.deserializeValue(elem.value, v);
+				value[elem.key.to!E] = v;
+			}
+			return;
+		case null_:
+			return;
+		default:
+			throw new DeserializationException(kind);
 	}
-	assert(elems.empty);
+}
+
+///
+unittest
+{
+	enum E {a, b}
+	assert(deserialize!(int[E])(serializeToJson(null)) is null);
+	assert(deserialize!(int[E])(serializeToAsdf(null)) is null);
+	assert(deserialize!(int[E])(serializeToJson([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
+	assert(deserialize!(int[E])(serializeToAsdf([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
 }
 
 /// Deserialize aggregate value
@@ -883,7 +1000,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 			{
 				foreach(member; __traits(allMembers, V))
 				{
-					static if(__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
+					static if(
+						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+						&&
+						__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 						static if(!ignoreIn(udas))
@@ -1059,7 +1179,8 @@ private bool ignoreIn(Serialization[] attrs)
 
 private void putCommonString(Appender)(auto ref Appender app, in char[] str)
 {
-	foreach(ref e; str)
+	import std.string: representation;
+	foreach(ref e; str.representation)
 	{
 		if(e < ' ')
 		{
@@ -1094,4 +1215,46 @@ private void putCommonString(Appender)(auto ref Appender app, in char[] str)
 		}
 		app.put(e);
 	}
+}
+
+private string toCommonString(in char[] str)
+{
+	import std.array: appender;
+	auto app = appender!(ubyte[]);
+	app.reserve(str.length);
+	for(size_t i; i < str.length; i++)
+	{
+		ubyte c = str[i];
+		if(c == '\\')
+		{
+			i++;
+			if(i == str.length)
+				throw new AsdfException("Asdf string value is broken");
+			c = str[i];
+			switch(c)
+			{
+				case '\"':
+				case '\\':
+					break;
+				case 't':
+					c = '\t';
+					break;
+				case 'r':
+					c = '\r';
+					break;
+				case 'n':
+					c = '\n';
+					break;
+				default:
+					throw new AsdfException("Asdf string value is broken");
+			}
+		}
+		app.put(c);
+	}
+	return cast(string) app.data;
+}
+
+private bool privateOrPackage(string protection)
+{
+	return protection == "private" || protection == "package";
 }
