@@ -613,7 +613,7 @@ unittest
 {
 	uint[string] ar = ["a" : 1];
 	assert(serializeToJson(ar) == `{"a":1}`);
-	ar.clear;
+	ar.remove("a");
 	assert(serializeToJson(ar) == `{}`);
 	assert(serializeToJson((uint[string]).init) == `null`);
 }
