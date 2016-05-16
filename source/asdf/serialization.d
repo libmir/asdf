@@ -57,7 +57,7 @@ unittest
 
 	static struct S
 	{
-		@serializationProxy!DateTimeProxy
+		@serializedAs!DateTimeProxy
 		DateTime time;
 		
 		C object;
@@ -186,14 +186,14 @@ unittest
 
 
 /// Serialization proxy for aggregation types
-struct serializationProxy(T){}
+struct serializedAs(T){}
 
 ///
 unittest
 {
 	struct S
 	{
-		@serializationProxy!string
+		@serializedAs!string
 		uint bar;
 	}
 
@@ -678,9 +678,9 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 				{
 					enum key = keyOut(S.stringof, member, udas);
 					serializer.putEscapedKey(key);
-					static if(hasSerializationProxy!(__traits(getMember, value, member)))
+					static if(hasSerializedAs!(__traits(getMember, value, member)))
 					{
-						alias Proxy = getSerializationProxy!(__traits(getMember, value, member));
+						alias Proxy = getSerializedAs!(__traits(getMember, value, member));
 						static if (is(Proxy : const(char)[])
 								&& isEscapedOut(S.stringof, member, udas))
 						{
@@ -690,7 +690,6 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 						{
 							serializer.serializeValue(__traits(getMember, value, member).to!Proxy);
 						}
-
 					}
 					else
 					static if(__traits(compiles, serializer.serializeValue(__traits(getMember, value, member))))
@@ -1016,9 +1015,9 @@ void deserializeValue(V)(Asdf data, ref V value)
 							}
 							alias Type = typeof(__traits(getMember, value, member));
 							alias Fun = Select!(isEscapedIn(V.stringof, member, udas), .deserializeEscapedString, .deserializeValue);
-							static if(hasSerializationProxy!(__traits(getMember, value, member)))
+							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
-								alias Proxy = getSerializationProxy!(__traits(getMember, value, member));
+								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
 						
 					Proxy proxy;
 					Fun(elem.value, proxy);
@@ -1053,40 +1052,40 @@ void deserializeValue(V)(Asdf data, ref V value)
 }
 
 
-private enum bool isSerializationProxy(A) = is(A : serializationProxy!T, T);
+private enum bool isSerializedAs(A) = is(A : serializedAs!T, T);
 
-private enum bool isSerializationProxy(alias a) = false;
+private enum bool isSerializedAs(alias a) = false;
 
 unittest
 {
-	static assert(isSerializationProxy!(serializationProxy!string));
-	static assert(!isSerializationProxy!(string));
+	static assert(isSerializedAs!(serializedAs!string));
+	static assert(!isSerializedAs!(string));
 }
 
-private alias ProxyList(alias value) = staticMap!(getSerializationProxy, Filter!(isSerializationProxy, __traits(getAttributes, value)));
+private alias ProxyList(alias value) = staticMap!(getSerializedAs, Filter!(isSerializedAs, __traits(getAttributes, value)));
 
-private template hasSerializationProxy(alias value)
+private template hasSerializedAs(alias value)
 {
 	private enum _listLength = ProxyList!(value).length;
 	static assert(_listLength <= 1, `Only single serialization proxy is allowed`);
-	enum bool hasSerializationProxy = _listLength == 1;
+	enum bool hasSerializedAs = _listLength == 1;
 }
 
 unittest
 {
-	@serializationProxy!string uint bar;
+	@serializedAs!string uint bar;
 	uint foo;
-	static assert(hasSerializationProxy!bar);
-	static assert(!hasSerializationProxy!foo);
+	static assert(hasSerializedAs!bar);
+	static assert(!hasSerializedAs!foo);
 }
 
-private alias getSerializationProxy(T :  serializationProxy!Proxy, Proxy) = Proxy;
+private alias getSerializedAs(T :  serializedAs!Proxy, Proxy) = Proxy;
 
-private template getSerializationProxy(alias value)
+private template getSerializedAs(alias value)
 {
 	private alias _list = ProxyList!value;
 	static assert(_list.length <= 1, `Only single serialization proxy is allowed`);
-	alias getSerializationProxy = _list[0];
+	alias getSerializedAs = _list[0];
 }
 
 private bool isEscapedOut(string type, string member, Serialization[] attrs)
