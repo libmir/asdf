@@ -1258,3 +1258,42 @@ private bool privateOrPackage(string protection)
 {
 	return protection == "private" || protection == "package";
 }
+
+/**
+ * Converts an input range $(D range) to an alias sequence.
+ */
+private template aliasSeqOf(alias range)
+{
+    import std.traits : isArray, isNarrowString;
+
+    alias ArrT = typeof(range);
+    static if (isArray!ArrT && !isNarrowString!ArrT)
+    {
+        static if (range.length == 0)
+        {
+            alias aliasSeqOf = AliasSeq!();
+        }
+        else static if (range.length == 1)
+        {
+            alias aliasSeqOf = AliasSeq!(range[0]);
+        }
+        else
+        {
+            alias aliasSeqOf = AliasSeq!(aliasSeqOf!(range[0 .. $/2]), aliasSeqOf!(range[$/2 .. $]));
+        }
+    }
+    else
+    {
+        import std.range.primitives : isInputRange;
+        static if (isInputRange!ArrT)
+        {
+            import std.array : array;
+            alias aliasSeqOf = aliasSeqOf!(array(range));
+        }
+        else
+        {
+            static assert(false, "Cannot transform range of type " ~ ArrT.stringof ~ " into a AliasSeq.");
+        }
+    }
+}
+
