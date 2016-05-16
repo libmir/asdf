@@ -642,7 +642,7 @@ unittest
 	enum E { a, b }
 	uint[E] ar = [E.a : 1];
 	assert(serializeToJson(ar) == `{"a":1}`);
-	ar.clear;
+	ar.remove(E.a);
 	assert(serializeToJson(ar) == `{}`);
 	assert(serializeToJson((uint[string]).init) == `null`);
 }
