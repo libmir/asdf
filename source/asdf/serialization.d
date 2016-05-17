@@ -1172,7 +1172,7 @@ private bool ignoreIn(Serialization[] attrs)
 	return attrs.canFind!(a => 
 			a.args == ["ignore"]
 			||
-			a.args == ["ignore-out"]
+			a.args == ["ignore-in"]
 			);
 }
 
