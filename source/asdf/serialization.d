@@ -1,5 +1,5 @@
 /++
-$(H3 ASDF Serialization)
+$(H3 ASDF and JSON Serialization)
 +/
 module asdf.serialization;
 
@@ -64,16 +64,21 @@ unittest
 
 		string[E] map;
 
-		@serialization("keys", "bar_common", "bar")
-		string bar = "escaped chars = '\\', '\"', '\t', '\r', '\n'";
+		@serializationKeys("bar_common", "bar")
+		string bar;
 		
-		@serialization("key-out", "bar_escaped")
+		@serializationKeys("bar_escaped")
 		@serialization("escaped")
-		string barEscaped = `escaped chars = '\\', '\"', '\t', '\r', '\n'`;
+		string barEscaped;
 	}
 
 	enum json = `{"time":"20160304T000000","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
-	auto value = S(DateTime(2016, 3, 4), new C, [E.a : "A"]);
+	auto value = S(
+		DateTime(2016, 3, 4), 
+		new C,
+		[E.a : "A"],
+		"escaped chars = '\\', '\"', '\t', '\r', '\n'",
+		`escaped chars = '\\', '\"', '\t', '\r', '\n'`);
 	assert(serializeToJson(value) == json);
 	assert(serializeToAsdf(value).to!string == json);
 	assert(deserialize!S(json).serializeToJson == json);
