@@ -215,10 +215,64 @@ struct Serialization
 }
 
 /// Returns Serialization with the `args` list.
-Serialization serialization(string[] args...)
+private Serialization serialization(string[] args...)
 {
 	return Serialization(args.dup);
 }
+
+/++
+Attribute for keys overloading.
+A first argument overload key value during serialization.
++/
+Serialization serializationKeys(string[] keys...)
+{
+	assert(keys.length, "use @serializationIgnore or at least one key");
+	return serialization("keys" ~ keys);
+}
+
+/++
+Attribute for keys overloading during deserialization.
++/
+Serialization serializationKeysIn(string[] keys...)
+{
+	assert(keys.length, "use @serializationIgnoreIn or at least one key");
+	return serialization("keys-in" ~ keys);
+}
+
+/++
+Attribute for key overloading during serialization.
++/
+Serialization serializationKeyOut(string key)
+{
+	return serialization("key-out", key);
+}
+
+/++
+Attribute to ignore fields.
++/
+enum Serialization serializationIgnore = serialization("ignore");
+
+/++
+Attribute to ignore field during deserialization.
++/
+enum Serialization serializationIgnoreIn = serialization("ignore-in");
+
+/++
+Attribute to ignore field during serialization.
++/
+enum Serialization serializationIgnoreOut = serialization("ignore-out");
+
+/++
+Attributes to skip escape characters decoding.
+Can be applied only to strings fields.
++/
+enum Serialization serializationEscaped = serialization("escaped");
+
+/// ditto
+enum Serialization serializationEscapedIn = serialization("escaped-in");
+
+/// ditto
+enum Serialization serializationEscapedOut = serialization("escaped-out");
 
 /// JSON serialization back-end
 struct JsonSerializer(Buffer)
