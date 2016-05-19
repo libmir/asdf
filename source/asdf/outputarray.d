@@ -36,7 +36,7 @@ package struct OutputArray
 		if(newShift < data.length)
 			extend(str.length);
 		data[shift .. newShift] = cast(ubyte[])str;
-		assert(newShift > shift);
+		//assert(newShift > shift);
 		shift = newShift;
 	}
 

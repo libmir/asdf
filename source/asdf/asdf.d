@@ -95,7 +95,7 @@ struct Asdf
 	}
 
 	/// Returns ASDF Kind
-	ubyte kind()
+	ubyte kind() const
 	{
 		enforce!EmptyAsdfException(data.length);
 		return data[0];
@@ -667,5 +667,161 @@ struct Asdf
 		assert(asdfData["inner", "b"] == false);
 		assert(asdfData["inner", "c"] == "32323");
 		assert(asdfData["inner", "d"] == null);
+	}
+
+	/++
+	`cast` operator overloading.
+	+/
+	T opCast(T)()
+	{
+		import std.traits: isFloatingPoint;
+		import std.conv: to, ConvException;
+		import std.format: format;
+		import asdf.serialization;
+		auto k = kind;
+		with(Kind) switch(kind)
+		{
+			case null_ :
+				static if (isFloatingPoint!T
+						|| is(T == interface)
+						|| is(T == class)
+						|| is(T == E[], E)
+						|| is(T == E[K], E, K)
+						|| is(T == bool))
+					return T.init;
+				else goto default;
+			case true_ :
+				static if(__traits(compiles, true.to!T))
+					return true.to!T;
+				else goto default;
+			case false_:
+				static if(__traits(compiles, false.to!T))
+					return false.to!T;
+				else goto default;
+			case number:
+				scope str = cast(const(char)[]) data[2 .. $];
+				static if(is(T == bool))
+					return str != "0";
+				else
+				static if(__traits(compiles, str.to!T))
+					return str.to!T;
+				else goto default;
+			case string:
+				scope str = cast(const(char)[]) data[5 .. $];
+				static if(is(T == bool))
+					return str != "0" && str != "false" && str != "";
+				else
+				static if(__traits(compiles, str.to!T))
+					return str.to!T;
+				else goto default;
+			case array :
+			case object:
+				static if(__traits(compiles, {T t = deserialize!T(this);}))
+					return deserialize!T(this);
+				else goto default;
+			default:
+				throw new ConvException(format("Cannot convert kind \\x%02X to %s", k, T.stringof));
+		}
+	}
+
+	/// null
+	unittest
+	{
+		import std.math;
+		import asdf.serialization;
+		auto null_ = serializeToAsdf(null);
+		interface I {}
+		class C {}
+		assert(cast(uint[]) null_ is null);
+		assert(cast(uint[uint]) null_ is null);
+		assert(cast(I) null_ is null);
+		assert(cast(C) null_ is null);
+		assert(isNaN(cast(double) null_));
+		assert(! cast(bool) null_);
+	}
+
+	/// boolean
+	unittest
+	{
+		import std.math;
+		import asdf.serialization;
+		auto true_ = serializeToAsdf(true);
+		auto false_ = serializeToAsdf(false);
+		static struct C {
+			this(bool){}
+		}
+		auto a = cast(C) true_;
+		auto b = cast(C) false_;
+		assert(cast(bool) true_ == true);
+		assert(cast(bool) false_ == false);
+		assert(cast(uint) true_ == 1);
+		assert(cast(uint) false_ == 0);
+		assert(cast(double) true_ == 1);
+		assert(cast(double) false_ == 0);
+	}
+
+	/// numbers
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		auto number = serializeToAsdf(1234);
+		auto zero = serializeToAsdf(0);
+		static struct C
+		{
+			this(in char[] numberString)
+			{
+				assert(numberString == "1234");
+			}
+		}
+		auto a = cast(C) number;
+		assert(cast(bool) number == true);
+		assert(cast(bool) zero == false);
+		assert(cast(uint) number == 1234);
+		assert(cast(double) number == 1234);
+		assert(cast(BigInt) number == 1234);
+		assert(cast(uint) zero == 0);
+		assert(cast(double) zero == 0);
+		assert(cast(BigInt) zero == 0);
+	}
+
+	/// string
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		auto number = serializeToAsdf("1234");
+		auto false_ = serializeToAsdf("false");
+		auto bar = serializeToAsdf("bar");
+		auto zero = serializeToAsdf("0");
+		static struct C
+		{
+			this(in char[] str)
+			{
+				assert(str == "1234");
+			}
+		}
+		auto a = cast(C) number;
+		assert(cast(string) number == "1234");
+		assert(cast(bool) number == true);
+		assert(cast(bool) bar == true);
+		assert(cast(bool) zero == false);
+		assert(cast(bool) false_ == false);
+		assert(cast(uint) number == 1234);
+		assert(cast(double) number == 1234);
+		assert(cast(BigInt) number == 1234);
+		assert(cast(uint) zero == 0);
+		assert(cast(double) zero == 0);
+		assert(cast(BigInt) zero == 0);
+	}
+
+	/++
+	For ASDF arrays and objects `cast(T)` just returns `this.deserialize!T`.
+	+/
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		assert(cast(int[]) serializeToAsdf([100, 20]) == [100, 20]);
 	}
 }
