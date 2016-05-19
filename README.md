@@ -125,7 +125,7 @@ struct S
 	// overloads multiple keys for parsing
 	@serializationKeysIn("b", "_b")
 	// overloads key for generation
-	@serializationKeysOut("_b_")
+	@serializationKeyOut("_b_")
 	int b;
 }
 ```
