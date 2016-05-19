@@ -54,10 +54,14 @@ class InvalidAsdfException: AsdfException
 	}
 }
 
-private void enforceValidAsdf(bool condition, uint kind)
+private void enforceValidAsdf(
+		bool condition,
+		uint kind,
+		string file = __FILE__,
+		size_t line = __LINE__)
 {
 	if(!condition)
-		throw new InvalidAsdfException(kind);
+		throw new InvalidAsdfException(kind, file, line);
 }
 
 ///
@@ -88,6 +92,13 @@ struct Asdf
 		string = 0x05,
 		array  = 0x09,
 		object = 0x0A,
+	}
+
+	/// Returns ASDF Kind
+	ubyte kind() const
+	{
+		enforce!EmptyAsdfException(data.length);
+		return data[0];
 	}
 
 	/++
@@ -132,7 +143,7 @@ struct Asdf
 		import std.range: chunks;
 		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
 		auto asdfData = text.chunks(13).parseJson(32);
-		asdfData.getValue(["inner", "d"]).remove;
+		asdfData["inner", "d"].remove;
 		assert(asdfData.to!string == `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","e":{}}}`);
 	}
 
@@ -603,63 +614,214 @@ struct Asdf
 	private size_t length4() const @property
 	{
 		assert(data.length >= 5);
-		version(X86_Any)
-			return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
-		else
-			static assert(0, "not implemented.");
+		return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
 	}
 
+	/// ditto
 	void length4(size_t len) const @property
 	{
 		assert(data.length >= 5);
 		assert(len <= uint.max);
-		version(X86_Any)
-			(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
-		else
-			static assert(0, "not implemented.");
+		(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
 	}
-}
 
-/++
-Searches a value recursively in an ASDF object.
 
-Params:
-	asdf = ASDF data
-	keys = input range of keys
-Returns
-	ASDF value if it was found (first win) or ASDF with empty plain data.
-+/
-Asdf getValue(Range)(Asdf asdf, Range keys)
-	if(is(ElementType!Range : const(char)[]))
-{
-	if(asdf.data.empty)
-		return Asdf.init;
-	L: foreach(key; keys)
+	/++
+	Searches a value recursively in an ASDF object.
+
+	Params:
+		keys = list of keys keys
+	Returns
+		ASDF value if it was found (first win) or ASDF with empty plain data.
+	+/
+	Asdf opIndex(in char[][] keys...)
 	{
-		if(asdf.data[0] != Asdf.Kind.object)
+		auto asdf = this;
+		if(asdf.data.empty)
 			return Asdf.init;
-		foreach(e; asdf.byKeyValue)
+		L: foreach(key; keys)
 		{
-			if(e.key == key)
+			if(asdf.data[0] != Asdf.Kind.object)
+				return Asdf.init;
+			foreach(e; asdf.byKeyValue)
 			{
-				asdf = e.value;
-				continue L;
+				if(e.key == key)
+				{
+					asdf = e.value;
+					continue L;
+				}
+			}
+			return Asdf.init;
+		}
+		return asdf;
+	}
+
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData["inner", "a"] == true);
+		assert(asdfData["inner", "b"] == false);
+		assert(asdfData["inner", "c"] == "32323");
+		assert(asdfData["inner", "d"] == null);
+	}
+
+	/++
+	`cast` operator overloading.
+	+/
+	T opCast(T)()
+	{
+		import std.traits: isFloatingPoint;
+		import std.conv: to, ConvException;
+		import std.format: format;
+		import asdf.serialization;
+		auto k = kind;
+		with(Kind) switch(kind)
+		{
+			case null_ :
+				static if (isFloatingPoint!T
+						|| is(T == interface)
+						|| is(T == class)
+						|| is(T == E[], E)
+						|| is(T == E[K], E, K)
+						|| is(T == bool))
+					return T.init;
+				else goto default;
+			case true_ :
+				static if(__traits(compiles, true.to!T))
+					return true.to!T;
+				else goto default;
+			case false_:
+				static if(__traits(compiles, false.to!T))
+					return false.to!T;
+				else goto default;
+			case number:
+				scope str = cast(const(char)[]) data[2 .. $];
+				static if(is(T == bool))
+					return str != "0";
+				else
+				static if(__traits(compiles, str.to!T))
+					return str.to!T;
+				else goto default;
+			case string:
+				scope str = cast(const(char)[]) data[5 .. $];
+				static if(is(T == bool))
+					return str != "0" && str != "false" && str != "";
+				else
+				static if(__traits(compiles, str.to!T))
+					return str.to!T;
+				else goto default;
+			case array :
+			case object:
+				static if(__traits(compiles, {T t = deserialize!T(this);}))
+					return deserialize!T(this);
+				else goto default;
+			default:
+				throw new ConvException(format("Cannot convert kind \\x%02X to %s", k, T.stringof));
+		}
+	}
+
+	/// null
+	unittest
+	{
+		import std.math;
+		import asdf.serialization;
+		auto null_ = serializeToAsdf(null);
+		interface I {}
+		class C {}
+		assert(cast(uint[]) null_ is null);
+		assert(cast(uint[uint]) null_ is null);
+		assert(cast(I) null_ is null);
+		assert(cast(C) null_ is null);
+		assert(isNaN(cast(double) null_));
+		assert(! cast(bool) null_);
+	}
+
+	/// boolean
+	unittest
+	{
+		import std.math;
+		import asdf.serialization;
+		auto true_ = serializeToAsdf(true);
+		auto false_ = serializeToAsdf(false);
+		static struct C {
+			this(bool){}
+		}
+		auto a = cast(C) true_;
+		auto b = cast(C) false_;
+		assert(cast(bool) true_ == true);
+		assert(cast(bool) false_ == false);
+		assert(cast(uint) true_ == 1);
+		assert(cast(uint) false_ == 0);
+		assert(cast(double) true_ == 1);
+		assert(cast(double) false_ == 0);
+	}
+
+	/// numbers
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		auto number = serializeToAsdf(1234);
+		auto zero = serializeToAsdf(0);
+		static struct C
+		{
+			this(in char[] numberString)
+			{
+				assert(numberString == "1234");
 			}
 		}
-		return Asdf.init;
+		auto a = cast(C) number;
+		assert(cast(bool) number == true);
+		assert(cast(bool) zero == false);
+		assert(cast(uint) number == 1234);
+		assert(cast(double) number == 1234);
+		assert(cast(BigInt) number == 1234);
+		assert(cast(uint) zero == 0);
+		assert(cast(double) zero == 0);
+		assert(cast(BigInt) zero == 0);
 	}
-	return asdf;
-}
 
-///
-unittest
-{
-	import asdf.jsonparser;
-	import std.range: chunks;
-	auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
-	auto asdfData = text.chunks(13).parseJson(32);
-	assert(asdfData.getValue(["inner", "a"]) == true);
-	assert(asdfData.getValue(["inner", "b"]) == false);
-	assert(asdfData.getValue(["inner", "c"]) == "32323");
-	assert(asdfData.getValue(["inner", "d"]) == null);
+	/// string
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		auto number = serializeToAsdf("1234");
+		auto false_ = serializeToAsdf("false");
+		auto bar = serializeToAsdf("bar");
+		auto zero = serializeToAsdf("0");
+		static struct C
+		{
+			this(in char[] str)
+			{
+				assert(str == "1234");
+			}
+		}
+		auto a = cast(C) number;
+		assert(cast(string) number == "1234");
+		assert(cast(bool) number == true);
+		assert(cast(bool) bar == true);
+		assert(cast(bool) zero == false);
+		assert(cast(bool) false_ == false);
+		assert(cast(uint) number == 1234);
+		assert(cast(double) number == 1234);
+		assert(cast(BigInt) number == 1234);
+		assert(cast(uint) zero == 0);
+		assert(cast(double) zero == 0);
+		assert(cast(BigInt) zero == 0);
+	}
+
+	/++
+	For ASDF arrays and objects `cast(T)` just returns `this.deserialize!T`.
+	+/
+	unittest
+	{
+		import std.bigint;
+		import asdf.serialization;
+		assert(cast(int[]) serializeToAsdf([100, 20]) == [100, 20]);
+	}
 }

@@ -31,8 +31,7 @@ unittest
 		// Use approximate size of an object.
 		// Size of the internal buffer would be extended automatically
 		.parseJsonByLine(4096)
-		.filter!(object => object
-			.getValue(["gender"]) == val)
+		.filter!(object => object["gender"] == val)
 		.count;
 	assert(count == 486);
 }

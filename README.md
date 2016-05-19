@@ -28,10 +28,9 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 
 #### TODO
 
-1. Advanced serialization.
-2. X86-64 string optimizations for LDC.
+1. X86-64 string optimizations for LDC.
 
-#### Example
+#### ASDF Example
 
 ```D
 import std.algorithm;
@@ -47,8 +46,8 @@ void main()
 		// 32 is minimal value for internal buffer. Buffer can be realocated to get more memory.
 		.parseJsonByLine(4096)
 		.filter!(object => object
-			// getValue accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
-			.getValue(["colors"])
+			// opIndex accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
+			["colors"]
 			// iterates over an array
 			.byElement
 			// Comparison with ASDF is little bit faster
@@ -80,4 +79,84 @@ null
 ```json
 {"colors":["red"]}
 {"a":"b","colors":[4,"red","string"]}
+```
+
+
+#### JSON and ASDF Serialization Examples
+
+##### Simple struct or object
+```d
+struct S
+{
+	string a;
+	long b;
+	private int c; // private feilds are ignored
+	package int d; // package feilds are ignored
+	// all other fields in JSON are ignored
+}
+```
+
+##### Selection
+```d
+struct S
+{
+	// ignored
+	@serializationIgnore
+	int temp;
+	
+	// can be formatted to json
+	@serializationIgnoreIn
+	int a;
+	
+	//can be parsed from json
+	@serializationIgnoreOut
+	int b;
+}
+```
+
+##### Key overriding
+```d
+struct S
+{
+	// key is overrided to "aaa"
+	@serializationKeys("aaa")
+	int a;
+
+	// overloads multiple keys for parsing
+	@serializationKeysIn("b", "_b")
+	// overloads key for generation
+	@serializationKeysOut("_b_")
+	int b;
+}
+```
+
+##### User-Defined Serialization
+```d
+struct DateTimeProxy
+{
+	DateTime datetime;
+	alias datetime this;
+
+	static DateTimeProxy deserialize(Asdf data)
+	{
+		string val;
+		deserializeEscapedString(data, val);
+		return DateTimeProxy(DateTime.fromISOString(val));
+	}
+
+	void serialize(S)(ref S serializer)
+	{
+		serializer.putEscapedStringValue(datetime.toISOString);
+	}
+}
+```
+
+
+##### Serialization Proxy
+```d
+struct S
+{
+	@serializedAs!DateTimeProxy
+	DateTime time;
+}
 ```
