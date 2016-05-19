@@ -143,7 +143,7 @@ struct Asdf
 		import std.range: chunks;
 		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
 		auto asdfData = text.chunks(13).parseJson(32);
-		asdfData.getValue(["inner", "d"]).remove;
+		asdfData["inner", "d"].remove;
 		assert(asdfData.to!string == `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","e":{}}}`);
 	}
 
@@ -624,48 +624,48 @@ struct Asdf
 		assert(len <= uint.max);
 		(cast(uint[1])cast(ubyte[4])data[1 .. 5])[0] = cast(uint) len;
 	}
-}
 
-/++
-Searches a value recursively in an ASDF object.
 
-Params:
-	asdf = ASDF data
-	keys = input range of keys
-Returns
-	ASDF value if it was found (first win) or ASDF with empty plain data.
-+/
-Asdf getValue(Range)(Asdf asdf, Range keys)
-	if(is(ElementType!Range : const(char)[]))
-{
-	if(asdf.data.empty)
-		return Asdf.init;
-	L: foreach(key; keys)
+	/++
+	Searches a value recursively in an ASDF object.
+
+	Params:
+		keys = list of keys keys
+	Returns
+		ASDF value if it was found (first win) or ASDF with empty plain data.
+	+/
+	Asdf opIndex(in char[][] keys...)
 	{
-		if(asdf.data[0] != Asdf.Kind.object)
+		auto asdf = this;
+		if(asdf.data.empty)
 			return Asdf.init;
-		foreach(e; asdf.byKeyValue)
+		L: foreach(key; keys)
 		{
-			if(e.key == key)
+			if(asdf.data[0] != Asdf.Kind.object)
+				return Asdf.init;
+			foreach(e; asdf.byKeyValue)
 			{
-				asdf = e.value;
-				continue L;
+				if(e.key == key)
+				{
+					asdf = e.value;
+					continue L;
+				}
 			}
+			return Asdf.init;
 		}
-		return Asdf.init;
+		return asdf;
 	}
-	return asdf;
-}
 
-///
-unittest
-{
-	import asdf.jsonparser;
-	import std.range: chunks;
-	auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
-	auto asdfData = text.chunks(13).parseJson(32);
-	assert(asdfData.getValue(["inner", "a"]) == true);
-	assert(asdfData.getValue(["inner", "b"]) == false);
-	assert(asdfData.getValue(["inner", "c"]) == "32323");
-	assert(asdfData.getValue(["inner", "d"]) == null);
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		import std.range: chunks;
+		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+		auto asdfData = text.chunks(13).parseJson(32);
+		assert(asdfData["inner", "a"] == true);
+		assert(asdfData["inner", "b"] == false);
+		assert(asdfData["inner", "c"] == "32323");
+		assert(asdfData["inner", "d"] == null);
+	}
 }
