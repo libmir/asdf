@@ -9,7 +9,7 @@ void main()
 		File("input.jsonl")
 		.byChunk(4096)
 		.parseJsonByLine(4096)
-		.map!(a => a.getValue(["colors"]))
+		.map!(a => a["colors"])
 		.filter!(a => a.data.length))
 	{
 		auto elems = a.byElement;
