@@ -221,8 +221,8 @@ private Serialization serialization(string[] args...)
 }
 
 /++
-Attribute for keys overloading.
-A first argument overload key value during serialization.
+Attribute for key overloading during Serialization and Deserialization.
+The first argument overloads the key value during serialization unless `serializationKeyOut` is given.
 +/
 Serialization serializationKeys(string[] keys...)
 {
@@ -231,7 +231,7 @@ Serialization serializationKeys(string[] keys...)
 }
 
 /++
-Attribute for keys overloading during deserialization.
+Attribute for key overloading during deserialization.
 +/
 Serialization serializationKeysIn(string[] keys...)
 {
