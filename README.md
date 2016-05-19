@@ -46,8 +46,8 @@ void main()
 		// 32 is minimal value for internal buffer. Buffer can be realocated to get more memory.
 		.parseJsonByLine(4096)
 		.filter!(object => object
-			// getValue accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
-			.getValue(["colors"])
+			// opIndex accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
+			["colors"]
 			// iterates over an array
 			.byElement
 			// Comparison with ASDF is little bit faster
