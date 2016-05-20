@@ -296,6 +296,45 @@ unittest
 		.deserialize!S == S(`a\ta`, `b\"b`, G("c\tc")));
 }
 
+/++
+Attributes for in and out transformations.
+Return type of in transformation must be implicitly convertable to the type of the field.
+Return type of out transformation may be differ from the type of the field.
+In transformation would be applied after serialization proxy if any.
+Out transformation would be applied before serialization proxy if any.
++/
+struct serializationTransformIn(alias fun)
+{
+	alias transform = fun;
+}
+
+/// ditto
+struct serializationTransformOut(alias fun)
+{
+	alias transform = fun;
+}
+
+///
+unittest
+{
+	// global unary function
+	static int fin(int i)
+	{
+		return i + 2;
+	}
+
+	struct S
+	{
+		@serializationTransformIn!fin
+		@serializationTransformOut!`"str".repeat.take(a).joiner("_").to!string`
+		int a;
+	}
+
+	auto s = deserialize!S(`{"a":3}`);
+	assert(s.a == 5);
+	assert(serializeToJson(s) == `{"a":"str_str_str_str_str"}`);
+}
+
 /// JSON serialization back-end
 struct JsonSerializer(Buffer)
 	if (isOutputRange!(Buffer, char))
@@ -757,6 +796,16 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
 				{
+					static if(hasTransformOut!(__traits(getMember, value, member)))
+					{
+						alias f = unaryFun!(getTransformOut!(__traits(getMember, value, member)));
+						auto val = f(__traits(getMember, value, member));
+					}
+					else
+					{
+						auto val = __traits(getMember, value, member);
+					}
+
 					enum key = keyOut(S.stringof, member, udas);
 					serializer.putEscapedKey(key);
 					static if(hasSerializedAs!(__traits(getMember, value, member)))
@@ -765,24 +814,24 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 						static if (is(Proxy : const(char)[])
 								&& isEscapedOut(S.stringof, member, udas))
 						{
-							serializer.putEscapedStringValue(__traits(getMember, value, member).to!Proxy);
+							serializer.putEscapedStringValue(val.to!Proxy);
 						}
 						else
 						{
-							serializer.serializeValue(__traits(getMember, value, member).to!Proxy);
+							serializer.serializeValue(val.to!Proxy);
 						}
 					}
 					else
-					static if(__traits(compiles, serializer.serializeValue(__traits(getMember, value, member))))
+					static if(__traits(compiles, serializer.serializeValue(val)))
 					{
 						static if (is(typeof(__traits(getMember, value, member)) : const(char)[])
 							&& isEscapedOut(S.stringof, member, udas))
 						{
-							serializer.putEscapedStringValue(__traits(getMember, value, member));
+							serializer.putEscapedStringValue(val);
 						}
 						else
 						{
-							serializer.serializeValue(__traits(getMember, value, member));
+							serializer.serializeValue(val);
 						}
 					}
 				}
@@ -1130,6 +1179,12 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 							}
 
+							static if(hasTransformIn!(__traits(getMember, value, member)))
+							{
+					alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
+					__traits(getMember, value, member) = f(__traits(getMember, value, member));
+							}
+
 					break;
 
 						}
@@ -1143,7 +1198,6 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 
 private enum bool isSerializedAs(A) = is(A : serializedAs!T, T);
-
 private enum bool isSerializedAs(alias a) = false;
 
 unittest
@@ -1152,13 +1206,49 @@ unittest
 	static assert(!isSerializedAs!(string));
 }
 
+private enum bool isTransformIn(A) = is(A : serializationTransformIn!fun, alias fun);
+private enum bool isTransformIn(alias a) = false;
+
+unittest
+{
+	static assert(isTransformIn!(serializationTransformIn!"a * 2"));
+	static assert(!isTransformIn!(string));
+}
+
+private enum bool isTransformOut(A) = is(A : serializationTransformOut!fun, alias fun);
+private enum bool isTransformOut(alias a) = false;
+
+unittest
+{
+	static assert(isTransformOut!(serializationTransformOut!"a * 2"));
+	static assert(!isTransformIn!(string));
+}
+
 private alias ProxyList(alias value) = staticMap!(getSerializedAs, Filter!(isSerializedAs, __traits(getAttributes, value)));
+private alias TransformInList(alias value) = staticMap!(getTransformIn, Filter!(isTransformIn, __traits(getAttributes, value)));
+private alias TransformOutList(alias value) = staticMap!(getTransformOut, Filter!(isTransformOut, __traits(getAttributes, value)));
+
+alias aliasThis(alias value) = value;
 
 private template hasSerializedAs(alias value)
 {
 	private enum _listLength = ProxyList!(value).length;
 	static assert(_listLength <= 1, `Only single serialization proxy is allowed`);
 	enum bool hasSerializedAs = _listLength == 1;
+}
+
+private template hasTransformIn(alias value)
+{
+	private enum _listLength = TransformInList!(value).length;
+	static assert(_listLength <= 1, `Only single input transformation is allowed`);
+	enum bool hasTransformIn = _listLength == 1;
+}
+
+private template hasTransformOut(alias value)
+{
+	private enum _listLength = TransformOutList!(value).length;
+	static assert(_listLength <= 1, `Only single output transformation is allowed`);
+	enum bool hasTransformOut = _listLength == 1;
 }
 
 unittest
@@ -1170,12 +1260,28 @@ unittest
 }
 
 private alias getSerializedAs(T :  serializedAs!Proxy, Proxy) = Proxy;
+private alias getTransformIn(T) = T.transform;
+private alias getTransformOut(T) = T.transform;
 
 private template getSerializedAs(alias value)
 {
 	private alias _list = ProxyList!value;
 	static assert(_list.length <= 1, `Only single serialization proxy is allowed`);
 	alias getSerializedAs = _list[0];
+}
+
+private template getTransformIn(alias value)
+{
+	private alias _list = TransformInList!value;
+	static assert(_list.length <= 1, `Only single input transformation is allowed`);
+	alias getTransformIn = _list[0];
+}
+
+private template getTransformOut(alias value)
+{
+	private alias _list = TransformOutList!value;
+	static assert(_list.length <= 1, `Only single output transformation is allowed`);
+	alias getTransformOut = _list[0];
 }
 
 private bool isEscapedOut(string type, string member, Serialization[] attrs)
