@@ -654,6 +654,33 @@ struct Asdf
 		assert(asdfData["inner", "b"] == false);
 		assert(asdfData["inner", "c"] == "32323");
 		assert(asdfData["inner", "d"] == null);
+		assert(asdfData["no", "such", "keys"] == Asdf.init);
+	}
+
+	/++
+	Params:
+		def = default value. It is used when ASDF value equals to `Asdf.init`.
+	Returns:
+		`cast(T) this` if `this != Asdf.init` and `def` otherwise.
+	+/
+	T get(T)(T def)
+	{
+		if(data.length)
+		{
+			return cast(T) this;
+		}
+		return def;
+	}
+
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
+		assert(asdfData["inner", "a"].get(false) == true);
+		assert(asdfData["inner", "b"].get(true) == false);
+		assert(asdfData["inner", "c"].get(100) == 32323);
+		assert(asdfData["no", "such", "keys"].get(100) == 100);
 	}
 
 	/++
