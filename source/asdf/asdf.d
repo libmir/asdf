@@ -140,9 +140,7 @@ struct Asdf
 	{
 		import std.conv: to;
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
 		asdfData["inner", "d"].remove;
 		assert(asdfData.to!string == `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","e":{}}}`);
 	}
@@ -345,9 +343,8 @@ struct Asdf
 	{
 		import std.conv: to;
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto text = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
+		auto asdfData = text.parseJson;
 		assert(asdfData.to!string == text);
 	}
 
@@ -363,9 +360,7 @@ struct Asdf
 	unittest
 	{
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`null`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `null`.parseJson;
 		assert(asdfData == asdfData);
 	}
 
@@ -381,9 +376,7 @@ struct Asdf
 	unittest
 	{
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`null`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `null`.parseJson;
 		assert(asdfData == null);
 	}
 
@@ -399,9 +392,7 @@ struct Asdf
 	unittest
 	{
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`true`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `true`.parseJson;
 		assert(asdfData == true);
 		assert(asdfData != false);
 	}
@@ -418,9 +409,7 @@ struct Asdf
 	unittest
 	{
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`"str"`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `"str"`.parseJson;
 		assert(asdfData == "str");
 		assert(asdfData != "stR");
 	}
@@ -660,9 +649,7 @@ struct Asdf
 	unittest
 	{
 		import asdf.jsonparser;
-		import std.range: chunks;
-		auto text = cast(const ubyte[])`{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
-		auto asdfData = text.chunks(13).parseJson(32);
+		auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
 		assert(asdfData["inner", "a"] == true);
 		assert(asdfData["inner", "b"] == false);
 		assert(asdfData["inner", "c"] == "32323");
