@@ -654,6 +654,36 @@ struct Asdf
 		assert(asdfData["inner", "b"] == false);
 		assert(asdfData["inner", "c"] == "32323");
 		assert(asdfData["inner", "d"] == null);
+		assert(asdfData["no", "such", "keys"] == Asdf.init);
+	}
+
+	/++
+	Searches a value recursively in an ASDF object.
+
+	Params:
+		def = default value. It is used when ASDF value equals to `Asdf.init`
+	Returns
+		ASDF value if it was found (first win) or ASDF with empty plain data.
+	+/
+	T get(T)(T def)
+	{
+		if(data.length)
+		{
+			import asdf.serialization;
+			return deserialize!T;
+		}
+		return def;
+	}
+
+	///
+	unittest
+	{
+		import asdf.jsonparser;
+		auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
+		assert(asdfData["inner", "a"].get(false) == true);
+		assert(asdfData["inner", "b"].get(true) == false);
+		assert(asdfData["inner", "c"].get(100) == 32323);
+		assert(asdfData["no", "such", "keys"].get(100) == 100);
 	}
 
 	/++
