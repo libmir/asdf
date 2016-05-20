@@ -265,7 +265,8 @@ enum Serialization serializationIgnoreOut = serialization("ignore-out");
 /++
 Attributes to skip escape characters decoding.
 Can be applied only to strings fields.
-Do not allocate new data when desalinizing. Raw ASDF data is used for strings instead memory allocation.
+Does not allocate new data when desalinizing. Raw ASDF data is used for strings instead of new memory allocation.
+Use this attributes only for strings that would not be used after ASDF deallocation.
 +/
 enum Serialization serializationEscaped = serialization("escaped");
 
