@@ -28,7 +28,7 @@ Params:
 Returns:
 	ASDF value
 +/
-Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, size_t initLength)
+Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, size_t initLength = 32)
 	if(is(ElementType!Chunks : const(ubyte)[]))
 {
 	return parseJson!(includingNewLine, Chunks)(chunks, chunks.front, initLength);
@@ -37,7 +37,6 @@ Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, size_t initL
 ///
 unittest
 {
-	import asdf.jsonparser;
 	import std.range: chunks;
 	auto text = cast(const ubyte[])`true`;
 	assert(text.chunks(3).parseJson(32).data == [1]);
@@ -52,7 +51,7 @@ Params:
 Returns:
 	ASDF value
 +/
-Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength)
+Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, const(ubyte)[] front, size_t initLength = 32)
 	if(is(ElementType!Chunks : const(ubyte)[]))
 {
 	import std.format: format;
@@ -69,11 +68,30 @@ Asdf parseJson(bool includingNewLine = true, Chunks)(Chunks chunks, const(ubyte)
 ///
 unittest
 {
-	import asdf.jsonparser;
 	import std.range: chunks;
 	auto text = cast(const ubyte[])`true `;
 	auto ch = text.chunks(3);
 	assert(ch.parseJson(ch.front, 32).data == [1]);
+}
+
+/++
+Parses json value
+Params:
+	str = input string
+	initLength = initial output buffer length. Minimal value equals 32.
+Returns:
+	ASDF value
++/
+Asdf parseJson(bool includingNewLine = true)(in char[] str, size_t initLength = 32)
+{
+	import std.range: only;
+	return parseJson!includingNewLine(only(cast(const ubyte[])str), cast(const ubyte[])str, initLength);
+}
+
+///
+unittest
+{
+	assert(`{"ak": {"sub": "subval"} }`.parseJson["ak", "sub"] == "subval");
 }
 
 /++
@@ -86,7 +104,7 @@ Params:
 Returns:
 	Input range composed of ASDF values. Each value uses the same internal buffer.
 +/
-auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength)
+auto parseJsonByLine(Chunks)(Chunks chunks, size_t initLength = 32)
 {
 	static struct ByLineValue
 	{
