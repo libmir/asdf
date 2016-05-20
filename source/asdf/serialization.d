@@ -265,6 +265,8 @@ enum Serialization serializationIgnoreOut = serialization("ignore-out");
 /++
 Attributes to skip escape characters decoding.
 Can be applied only to strings fields.
+Does not allocate new data when desalinizing. Raw ASDF data is used for strings instead of new memory allocation.
+Use this attributes only for strings that would not be used after ASDF deallocation.
 +/
 enum Serialization serializationEscaped = serialization("escaped");
 
@@ -273,6 +275,26 @@ enum Serialization serializationEscapedIn = serialization("escaped-in");
 
 /// ditto
 enum Serialization serializationEscapedOut = serialization("escaped-out");
+
+///
+unittest
+{
+	static struct G
+	{
+		string c;
+	}
+
+	static struct S
+	{
+		@serializationEscaped:
+		string a;
+		string b;
+		G g;
+	}
+
+	assert(`{"a":"a\ta", "b":"b\"b", "g": {"c": "c\tc"}}`
+		.deserialize!S == S(`a\ta`, `b\"b`, G("c\tc")));
+}
 
 /// JSON serialization back-end
 struct JsonSerializer(Buffer)
@@ -847,7 +869,10 @@ unittest
 	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
 }
 
-/// Deserialize escaped string value
+/++
+Deserialize escaped string value
+This function does not allocate a new string and just make a raw cast of ASDF data.
++/
 void deserializeEscapedString(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
@@ -855,7 +880,7 @@ void deserializeEscapedString(V)(Asdf data, ref V value)
 	with(Asdf.Kind) switch(kind)
 	{
 		case string:
-			value = cast(V) data.data[5 .. $].dup;
+			value = cast(V) data.data[5 .. $];
 			return;
 		case null_:
 			value = null;
@@ -1073,10 +1098,11 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 							}
 							alias Type = typeof(__traits(getMember, value, member));
-							alias Fun = Select!(isEscapedIn(V.stringof, member, udas), .deserializeEscapedString, .deserializeValue);
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, proxy));
+								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
 						
 					Proxy proxy;
 					Fun(elem.value, proxy);
@@ -1086,14 +1112,19 @@ void deserializeValue(V)(Asdf data, ref V value)
 							else
 							static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
+								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, __traits(getMember, value, member)));
+								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
 
 					Fun(elem.value, __traits(getMember, value, member));
 
 							}
 							else
 							{
-
 					Type val;
+
+								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, val));
+								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
+
 					Fun(elem.value, val);
 					__traits(getMember, value, member) = val;
 
