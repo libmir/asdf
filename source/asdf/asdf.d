@@ -658,19 +658,16 @@ struct Asdf
 	}
 
 	/++
-	Searches a value recursively in an ASDF object.
-
 	Params:
-		def = default value. It is used when ASDF value equals to `Asdf.init`
-	Returns
-		ASDF value if it was found (first win) or ASDF with empty plain data.
+		def = default value. It is used when ASDF value equals to `Asdf.init`.
+	Returns:
+		`cast(T) this` if `this != Asdf.init` and `def` otherwise.
 	+/
 	T get(T)(T def)
 	{
 		if(data.length)
 		{
-			import asdf.serialization;
-			return deserialize!T;
+			return cast(T) this;
 		}
 		return def;
 	}
