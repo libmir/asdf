@@ -91,7 +91,7 @@ Asdf parseJson(bool includingNewLine = true)(in char[] str, size_t initLength = 
 ///
 unittest
 {
-	assert(parseJson(`true`).data == [1]);
+	assert(`{"ak": {"sub": "subval"} }`.parseJson["ak", "sub"] == "subval");
 }
 
 /++
