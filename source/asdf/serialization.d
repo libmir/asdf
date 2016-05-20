@@ -265,6 +265,7 @@ enum Serialization serializationIgnoreOut = serialization("ignore-out");
 /++
 Attributes to skip escape characters decoding.
 Can be applied only to strings fields.
+Do not allocate new data when desalinizing. Raw ASDF data is used for strings instead memory allocation.
 +/
 enum Serialization serializationEscaped = serialization("escaped");
 
@@ -847,7 +848,10 @@ unittest
 	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
 }
 
-/// Deserialize escaped string value
+/++
+Deserialize escaped string value
+This function does not allocate a new string and just make a raw cast of ASDF data.
++/
 void deserializeEscapedString(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
@@ -855,7 +859,7 @@ void deserializeEscapedString(V)(Asdf data, ref V value)
 	with(Asdf.Kind) switch(kind)
 	{
 		case string:
-			value = cast(V) data.data[5 .. $].dup;
+			value = cast(V) data.data[5 .. $];
 			return;
 		case null_:
 			value = null;
