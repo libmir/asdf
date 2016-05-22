@@ -84,6 +84,45 @@ unittest
 	assert(deserialize!S(json).serializeToJson == json);
 }
 
+/// `finalizeSerialization` method
+unittest
+{
+	static struct S
+	{
+		string a;
+		int b;
+
+		void finalizeSerialization(Serializer)(Serializer serializer)
+		{
+			serializer.putKey("c");
+			serializer.putValue(100);
+		}
+	}
+	assert(S("bar", 3).serializeToJson == `{"a":"bar","b":3,"c":100}`);
+}
+
+/// `finalizeDeserialization` method
+unittest
+{
+	static struct S
+	{
+		string a;
+		int b;
+
+		@serializationIgnoreIn
+		double sum;
+
+		void finalizeDeserialization(Asdf data)
+		{
+			auto r = data["c", "d"];
+			auto a = r["e"].get(0.0);
+			auto b = r["g"].get(0.0);
+			sum = a + b;
+		}
+	}
+	assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
+}
+
 import std.traits;
 import std.meta;
 import std.range.primitives;
@@ -837,6 +876,10 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 				}
 			}
 		}
+		static if(__traits(compiles, value.finalizeSerialization(serializer)))
+		{
+			value.finalizeSerialization(serializer);
+		}
 		serializer.objectEnd(state);
 	}
 }
@@ -1192,6 +1235,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 				default:
 			}
+		}
+		static if(__traits(compiles, {value.finalizeDeserialization(data);}))
+		{
+			value.finalizeDeserialization(data);
 		}
 	}
 }
