@@ -830,7 +830,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 			static if(
 				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
 				&&
-				__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
+				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
@@ -1144,7 +1144,7 @@ unittest
 void deserializeValue(V)(Asdf data, ref V value)
 	if(isAggregateType!V && !is(V : BigInt))
 {
-	static if(__traits(compiles, {value = V.deserialize(data);}))
+	static if(__traits(compiles, value = V.deserialize(data)))
 	{
 		value = V.deserialize(data);
 	}
@@ -1159,7 +1159,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 		{
 			if(value is null)
 			{
-				static if(__traits(compiles, {value = new V;}))
+				static if(__traits(compiles, value = new V))
 				{
 					value = new V;
 				}
@@ -1178,7 +1178,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 					static if(
 						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
 						&&
-						__traits(compiles, { __traits(getMember, value, member) = __traits(getMember, value, member); }))
+						__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 						static if(!ignoreIn(udas))
@@ -1236,7 +1236,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 				default:
 			}
 		}
-		static if(__traits(compiles, {value.finalizeDeserialization(data);}))
+		static if(__traits(compiles, value.finalizeDeserialization(data)))
 		{
 			value.finalizeDeserialization(data);
 		}
