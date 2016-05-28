@@ -439,7 +439,6 @@ struct JsonSerializer(Buffer)
 	{
 		incState;
 		app.put('\"');
-		import asdf.asdf: putCommonString;
 		app.putCommonString(key);
 		app.put('\"');
 		app.put(':');
@@ -475,7 +474,6 @@ struct JsonSerializer(Buffer)
 	void putValue(in char[] str)
 	{
 		app.put('\"');
-		import asdf.asdf: putCommonString;
 		app.putCommonString(str);
 		app.put('\"');
 	}
@@ -491,6 +489,43 @@ struct JsonSerializer(Buffer)
 	void elemBegin()
 	{
 		incState;
+	}
+}
+
+package void putCommonString(Appender)(auto ref Appender app, in char[] str)
+{
+	import std.string: representation;
+	foreach(char e; str.representation)
+	{
+		if(e < ' ')
+		{
+			app.put('\\');
+			switch(e)
+			{
+				case '\b': app.put('b'); continue;
+				case '\f': app.put('f'); continue;
+				case '\n': app.put('n'); continue;
+				case '\r': app.put('r'); continue;
+				case '\t': app.put('t'); continue;
+				default:
+					import std.utf: UTFException;
+					import std.format: format;
+					throw new UTFException(format("unexpected char \\x%X", e));
+			}
+		}
+		if(e == '\\')
+		{
+			app.put('\\');
+			app.put('\\');
+			continue;
+		}
+		if(e == '\"')
+		{
+			app.put('\\');
+			app.put('\"');
+			continue;
+		}
+		app.put(e);
 	}
 }
 
