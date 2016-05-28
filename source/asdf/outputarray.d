@@ -57,12 +57,6 @@ package struct OutputArray
 		shift += 4;
 	}
 
-	version(SSE42)
-	void put16(ubyte16 b, size_t len)
-	{
-		put16(b, len, shift);
-	}
-
 	void put1(ubyte b, size_t sh)
 	{
 		assert(sh <= data.length);
@@ -80,18 +74,17 @@ package struct OutputArray
 		*cast(uint*) (data.ptr + sh) = b;
 	}
 
-	version(SSE42)
-	void put16(ubyte16 b, size_t len)
+	void extend(size_t len)
 	{
-		if(shift + 16 > data.length)
-			extend;
-		__builtin_ia32_storedqu(data.ptr, b);
-		shift += len;
+		size_t length = (data.length) * 2 + len;
+		void[] t = data;
+		GCAllocator.instance.reallocate(t, length);
+		data = cast(ubyte[])t;
 	}
 
-	private void extend(size_t add = 0)
+	void extend()
 	{
-		size_t length = (data.length) * 2 + add;
+		size_t length = (data.length) * 2;
 		void[] t = data;
 		GCAllocator.instance.reallocate(t, length);
 		data = cast(ubyte[])t;
