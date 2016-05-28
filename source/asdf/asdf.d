@@ -19,12 +19,6 @@ import std.exception;
 import std.range.primitives;
 import std.typecons;
 
-version(X86)
-	version = X86_Any;
-
-version(X86_64)
-	version = X86_Any;
-
 ///
 class AsdfException: Exception
 {
@@ -173,9 +167,12 @@ struct Asdf
 			case Kind.string:
 				enforceValidAsdf(data.length >= 5, Kind.object);
 				enforceValidAsdf(data.length == length4 + 5, t);
-				sink("\"");
-				sink(cast(string) data[5 .. $]);
-				sink("\"");
+				import std.array: appender, Appender;
+				auto app = appender!(ubyte[]);
+				app.put('\"');
+				putCommonString(app, cast(const(char)[]) data[5 .. $]);
+				app.put('\"');
+				sink(cast(string) app.data);
 				break;
 			default:
 				// Uses internal buffer for object and arrays.
@@ -292,7 +289,7 @@ struct Asdf
 				enforceValidAsdf(data.length >= 5, Kind.object);
 				enforceValidAsdf(data.length == length4 + 5, t);
 				sink.put('"');
-				sink.put!true(cast(string) data[5 .. $]);
+				putCommonString(sink, cast(string) data[5 .. $]);
 				sink.put('"');
 				break;
 			case Kind.array:
@@ -837,5 +834,40 @@ struct Asdf
 		import std.bigint;
 		import asdf.serialization;
 		assert(cast(int[]) serializeToAsdf([100, 20]) == [100, 20]);
+	}
+}
+
+package void putCommonString(Appender)(auto ref Appender app, in char[] str)
+{
+	import std.string: representation;
+	foreach(char e; str.representation)
+	{
+		if(e < ' ')
+		{
+			app.put('\\');
+			switch(e)
+			{
+				case '\n': app.put('n'); continue;
+				case '\r': app.put('r'); continue;
+				case '\t': app.put('t'); continue;
+				default:
+					import std.utf: UTFException;
+					import std.format: format;
+					throw new UTFException(format("unexpected char \\x%X", e));
+			}
+		}
+		if(e == '\\')
+		{
+			app.put('\\');
+			app.put('\\');
+			continue;
+		}
+		if(e == '\"')
+		{
+			app.put('\\');
+			app.put('\"');
+			continue;
+		}
+		app.put(e);
 	}
 }
