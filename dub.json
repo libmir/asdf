@@ -3,5 +3,12 @@
 	"description": "A Simple Document Format",
 	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko"],
-	"copyright": "Tamedia Digital, 2016"
+	"copyright": "Tamedia Digital, 2016",
+	"configurations": [
+		{
+			"name": "native-sse42",
+			"dflags-ldc": ["-mcpu=native"],
+			"versions-ldc": ["SSE42"]
+		}
+	]
 }
