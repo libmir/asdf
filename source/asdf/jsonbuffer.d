@@ -6,7 +6,7 @@ package struct JsonBuffer
 	// current buffer length
 	size_t length;
 
-	char[4096] buffer;
+	char[4096] buffer = void;
 
 	/+
 	Puts char
@@ -41,10 +41,9 @@ package struct JsonBuffer
 	}
 
 	/+
-	Params:
-		str = string to write
+	Puts key/number
 	+/
-	void putNumber(in char[] str)
+	void putSmallEscaped(in char[] str)
 	{
 		assert(str.length <= ubyte.max);
 		size_t newLength = length + str.length;

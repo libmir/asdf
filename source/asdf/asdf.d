@@ -138,8 +138,6 @@ struct Asdf
 		import asdf.jsonparser;
 		auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
 		asdfData["inner", "d"].remove;
-		import std.stdio;
-		asdfData.to!string.writeln;
 		assert(asdfData.to!string == `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","e":{}}}`);
 	}
 
@@ -178,7 +176,7 @@ struct Asdf
 				enforceValidAsdf(data.length > 1, t);
 				size_t length = data[1];
 				enforceValidAsdf(data.length == length + 2, t);
-				sink.putNumber(cast(const(char)[]) data[2 .. $]);
+				sink.putSmallEscaped(cast(const(char)[]) data[2 .. $]);
 				break;
 			case Kind.string:
 				enforceValidAsdf(data.length >= 5, Kind.object);
