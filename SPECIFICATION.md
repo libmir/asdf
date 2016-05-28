@@ -1,4 +1,4 @@
-# Version v1.0-alpha5
+# Version v1.0-beta1
 
 ### Value
 
@@ -17,10 +17,24 @@ number              ::= number_length json_number_string
 
 number_length       ::= uint8
 
-string              ::= string_length json_encoded_string
+string              ::= string_length string_data
 
 string_length       ::= uint32
 ```
+
+### JSON character encoding
+Following JSON encoded characters are decoded to an appropriate unicode character.
+```
+\"
+\\
+\/
+\b
+\f
+\n
+\r
+\t
+```
+`\u four-hex-digits` pattern is not supported.
 
 ### Array
 
@@ -45,7 +59,7 @@ key_value_pairs
       key value key_value_pairs
     | < empty >
 
-key           ::= key_length json_encoded_string
+key           ::= key_length string_data
 
 key_length    ::= uint8
 ```
