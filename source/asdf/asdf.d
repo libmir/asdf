@@ -847,6 +847,8 @@ package void putCommonString(Appender)(auto ref Appender app, in char[] str)
 			app.put('\\');
 			switch(e)
 			{
+				case '\b': app.put('b'); continue;
+				case '\f': app.put('f'); continue;
 				case '\n': app.put('n'); continue;
 				case '\r': app.put('r'); continue;
 				case '\t': app.put('t'); continue;
