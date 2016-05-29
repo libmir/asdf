@@ -573,12 +573,7 @@ struct AsdfSerializer
 	}
 
 	///ditto
-	void putEscapedKey(in char[] key)
-	{
-		assert(key.length < ubyte.max);
-		app.put1(cast(ubyte) key.length);
-		app.put(key);
-	}
+	alias putEscapedKey = putKey;
 
 	///ditto
 	void putKey(in char[] key)
@@ -1315,19 +1310,6 @@ private template getTransformOut(alias value)
 	private alias _list = TransformOutList!value;
 	static assert(_list.length <= 1, `Only single output transformation is allowed`);
 	alias getTransformOut = _list[0];
-}
-
-private bool isEscaped(string type, string member, Serialization[] attrs)
-{
-	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = unaryFun!(a => a.args[0] == "escaped");
-	auto c = attrs.count!pred;
-	if(c == 0)
-		return false;
-	if(c == 1)
-		return true;
-	throw new Exception(type ~ "." ~ member ~
-		` : Only single declaration of "escaped" / "escaped-out" serialization attribute is allowed`);
 }
 
 private bool isScoped(string type, string member, Serialization[] attrs)
