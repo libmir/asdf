@@ -301,12 +301,26 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						{
 							byte16 str1 = void;
 							str1 ^= str1;
-							align(16) byte[16] str1E = void;
-							* cast(__vector(byte[16])*) str1E.ptr = str1;
-							foreach(i; 0..d.length)
-								str1E[i] = r[i];
-							
-							str1 = * cast(__vector(byte[16])*) str1E.ptr;
+							switch(d.length)
+							{
+								default: goto case;
+								case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
+								case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
+								case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
+								case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
+								case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
+								case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
+								case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
+								case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
+								case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
+								case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
+								case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
+								case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
+								case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
+								case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
+								case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
+								case 0x0  : break;
+							}
 
 							size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
 							r = d = d[ecx .. $];
@@ -426,12 +440,27 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 					{
 						byte16 str1 = void;
 						str1 ^= str1;
-						align(16) byte[16] str1E = void;
-						* cast(__vector(byte[16])*) str1E.ptr = str1;
-						foreach(i; 0..d.length)
-							str1E[i] = r[i];
-						
-						str1 = * cast(__vector(byte[16])*) str1E.ptr;
+						switch(d.length)
+						{
+							default   : goto case;
+							case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
+							case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
+							case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
+							case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
+							case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
+							case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
+							case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
+							case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
+							case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
+							case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
+							case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
+							case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
+							case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
+							case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
+							case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
+							case 0x0  : break;
+						}
+
 						storeUnaligned!ubyte16(str1, ptr + shift);
 
 						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
@@ -583,12 +612,27 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 					{
 						byte16 str1 = void;
 						str1 ^= str1;
-						align(16) byte[16] str1E = void;
-						* cast(__vector(byte[16])*) str1E.ptr = str1;
-						foreach(i; 0..d.length)
-							str1E[i] = r[i];
+						switch(d.length)
+						{
+							default   : goto case;
+							case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
+							case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
+							case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
+							case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
+							case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
+							case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
+							case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
+							case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
+							case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
+							case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
+							case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
+							case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
+							case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
+							case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
+							case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
+							case 0x0  : break;
+						}
 
-						str1 = * cast(__vector(byte[16])*) str1E.ptr;
 						storeUnaligned!ubyte16(str1, ptr + shift);
 
 						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
