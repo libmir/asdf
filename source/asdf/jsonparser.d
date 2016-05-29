@@ -303,7 +303,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 							str1 ^= str1;
 							switch(d.length)
 							{
-								default: goto case;
+								default   : goto case;
 								case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
 								case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
 								case 0xC+1: str1.array[0xC] = d[0xC]; goto case;

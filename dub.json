@@ -6,8 +6,10 @@
 	"copyright": "Tamedia Digital, 2016",
 	"configurations": [
 		{
+			"name":"generic"
+		},
+		{
 			"name": "native-sse42",
-			"dflags-ldc": ["-mcpu=native"],
 			"versions-ldc": ["SSE42"]
 		}
 	]

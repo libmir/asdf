@@ -25,3 +25,5 @@ examples/arrays_count/arrays_count
 *.s
 
 __test__native-sse42__
+
+__test__generic__
