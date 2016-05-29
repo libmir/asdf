@@ -61,47 +61,123 @@ package struct JsonBuffer
 	{
 		import std.range: chunks;
 		import std.string: representation;
-		foreach(chunk; str.representation.chunks(256))
+		version(SSE42)
 		{
-			if(chunk.length + length > buffer.length)
-				flush;
-			auto ptr = buffer.ptr + length;
-			foreach(size_t i, char e; chunk)
+			import core.simd;
+			import asdf.simd;
+			import ldc.gccbuiltins_x86;
+
+			enum byte16 str2E = [
+				'\u0001', '\u001F',
+				'\"', '\"',
+				'\\', '\\',
+				'\u007f', '\u007f',
+				'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+			enum byte16 str3E = ['\"', '\\', '\b', '\f', '\n', '\r', '\t', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+			byte16 str2 = str2E;
+			byte16 str3 = str3E;
+			static immutable emap = ['\"', '\\', 'b', 'f', 'n', 'r', 't'];
+			for(auto d = str.representation; d.length;)
 			{
-				if(e < ' ')
+				if(length + 17 > buffer.length)
 				{
-					ptr++[i] = '\\';
-					length++;
-					switch(e)
+					flush;
+				}
+				byte16 str1 = void;
+				int ecx = void;
+				if(d.length >= 16)
+				{
+					str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
+					storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+					auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
+					ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
+					d = d[ecx .. $];
+					length += ecx;
+					if(ecx == 16)
+						continue;
+				}
+				else
+				{
+					str1 ^= str1;
+					align(16) byte[16] str1E = void;
+					* cast(__vector(byte[16])*) str1E.ptr = str1;
+					foreach(i; 0..d.length)
+						str1E[i] = d[i];
+					str1 = * cast(__vector(byte[16])*) str1E.ptr;
+					storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+					auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
+					ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
+					if(!cflag)
 					{
-						case '\b': ptr[i] = 'b'; continue;
-						case '\f': ptr[i] = 'f'; continue;
-						case '\n': ptr[i] = 'n'; continue;
-						case '\r': ptr[i] = 'r'; continue;
-						case '\t': ptr[i] = 't'; continue;
-						default:
-							import std.utf: UTFException;
-							import std.format: format;
-							throw new UTFException(format("unexpected char \\x%X", e));
+						length += d.length;
+						break;
 					}
+					d = d[ecx .. $];
+					length += ecx;
 				}
-				if(e == '\\')
+
+				int eax = ecx + 1;
+				auto cflag = __builtin_ia32_pcmpestric128(str1, eax, str3, emap.length, 0x00);
+				ecx =        __builtin_ia32_pcmpestri128 (str1, eax, str3, emap.length, 0x00);
+				if(cflag)
 				{
-					ptr++[i] = '\\';
-					length++;
-					ptr[i] = '\\';
+					d = d[1 .. $];
+					buffer[length + 0] = '\\';
+					buffer[length + 1] = emap[ecx];
+					length += 2;
 					continue;
 				}
-				if(e == '\"')
-				{
-					ptr++[i] = '\\';
-					length++;
-					ptr[i] = '\"';
-					continue;
-				}
-				ptr[i] = e;
+				import std.utf: UTFException;
+				import std.format: format;
+				throw new UTFException(format("unexpected char \\x%X", d[0]));
 			}
-			length += chunk.length;
+		}
+		else
+		{
+			foreach(chunk; str.representation.chunks(256))
+			{
+				if(chunk.length + length + 16 > buffer.length)
+				{
+					flush;
+				}
+				auto ptr = buffer.ptr + length;
+				foreach(size_t i, char e; chunk)
+				{
+					if(e < ' ')
+					{
+						ptr++[i] = '\\';
+						length++;
+						switch(e)
+						{
+							case '\b': ptr[i] = 'b'; continue;
+							case '\f': ptr[i] = 'f'; continue;
+							case '\n': ptr[i] = 'n'; continue;
+							case '\r': ptr[i] = 'r'; continue;
+							case '\t': ptr[i] = 't'; continue;
+							default:
+								import std.utf: UTFException;
+								import std.format: format;
+								throw new UTFException(format("unexpected char \\x%X", e));
+						}
+					}
+					if(e == '\\')
+					{
+						ptr++[i] = '\\';
+						length++;
+						ptr[i] = '\\';
+						continue;
+					}
+					if(e == '\"')
+					{
+						ptr++[i] = '\\';
+						length++;
+						ptr[i] = '\"';
+						continue;
+					}
+					ptr[i] = e;
+				}
+				length += chunk.length;
+			}
 		}
 	}
 
