@@ -639,6 +639,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 	{
 		oa.put1(t);
 		version(SSE42)
+		if(r.length >= word.length)
 		{
 			static if (word == "ull")
 			{
@@ -663,17 +664,29 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 			if(setFrontRange == false)
 				return 0;
 			auto d = r;
-			if(d.length >= 16)
+			byte16 str1 = void;
+			str1 ^= str1;
+			static if(word.length == 3)
 			{
-				byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
-				auto cflag = __builtin_ia32_pcmpistric128(str2 , str1, 0x18);
-				auto ecx   = __builtin_ia32_pcmpistri128 (str2 , str1, 0x18);
-				if(!cflag)
-					return -d[ecx];
-				assert(ecx == word.length);
-				r = d[ecx .. $];
-				return 1;
+				str1.array[0x0] = d[0x0];
+				str1.array[0x1] = d[0x1];
+				str1.array[0x2] = d[0x2];
 			}
+			else
+			static if(word.length == 4)
+			{
+				str1.array[0x0] = d[0x0];
+				str1.array[0x1] = d[0x1];
+				str1.array[0x2] = d[0x2];
+				str1.array[0x3] = d[0x3];
+			}
+			auto cflag = __builtin_ia32_pcmpistric128(str2 , str1, 0x38);
+			auto ecx   = __builtin_ia32_pcmpistri128 (str2 , str1, 0x38);
+			if(!cflag)
+				return -d[ecx];
+			assert(ecx == word.length);
+			r = d[ecx .. $];
+			return 1;
 		}
 		foreach(i; 0 .. word.length)
 		{
