@@ -15,7 +15,7 @@ package struct JsonBuffer
 	{
 		if(length == buffer.length)
 		{
-			sink(buffer[0 .. length]);
+			sink(buffer[]);
 			length = 0;
 		}
 		buffer[length++] = c;
@@ -62,38 +62,49 @@ package struct JsonBuffer
 	+/
 	void put(in char[] str)
 	{
+		import std.range: chunks;
 		import std.string: representation;
-		foreach(char e; str.representation)
+		foreach(chunk; str.representation.chunks(256))
 		{
-			if(e < ' ')
+			if(chunk.length + length > buffer.length)
+				flush;
+			auto ptr = buffer.ptr + length;
+			foreach(size_t i, char e; chunk)
 			{
-				put('\\');
-				switch(e)
+				if(e < ' ')
 				{
-					case '\b': put('b'); continue;
-					case '\f': put('f'); continue;
-					case '\n': put('n'); continue;
-					case '\r': put('r'); continue;
-					case '\t': put('t'); continue;
-					default:
-						import std.utf: UTFException;
-						import std.format: format;
-						throw new UTFException(format("unexpected char \\x%X", e));
+					ptr++[i] = '\\';
+					length++;
+					switch(e)
+					{
+						case '\b': ptr[i] = 'b'; continue;
+						case '\f': ptr[i] = 'f'; continue;
+						case '\n': ptr[i] = 'n'; continue;
+						case '\r': ptr[i] = 'r'; continue;
+						case '\t': ptr[i] = 't'; continue;
+						default:
+							import std.utf: UTFException;
+							import std.format: format;
+							throw new UTFException(format("unexpected char \\x%X", e));
+					}
 				}
+				if(e == '\\')
+				{
+					ptr++[i] = '\\';
+					length++;
+					ptr[i] = '\\';
+					continue;
+				}
+				if(e == '\"')
+				{
+					ptr++[i] = '\\';
+					length++;
+					ptr[i] = '\"';
+					continue;
+				}
+				ptr[i] = e;
 			}
-			if(e == '\\')
-			{
-				put('\\');
-				put('\\');
-				continue;
-			}
-			if(e == '\"')
-			{
-				put('\\');
-				put('\"');
-				continue;
-			}
-			put(e);
+			length += chunk.length;
 		}
 	}
 
