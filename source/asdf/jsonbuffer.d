@@ -15,8 +15,7 @@ package struct JsonBuffer
 	{
 		if(length == buffer.length)
 		{
-			sink(buffer[]);
-			length = 0;
+			flush;
 		}
 		buffer[length++] = c;
 	}
@@ -29,8 +28,7 @@ package struct JsonBuffer
 		size_t newLength = length + str.length;
 		if(newLength > buffer.length)
 		{
-			sink(buffer[0 .. length]);
-			length = 0;
+			flush;
 			newLength = str.length;
 		}
 		import asdf.utility;
@@ -49,8 +47,7 @@ package struct JsonBuffer
 		size_t newLength = length + str.length;
 		if(newLength > buffer.length)
 		{
-			sink(buffer[0 .. length]);
-			length = 0;
+			flush;
 			newLength = str.length;
 		}
 		buffer[length .. newLength] = str;
