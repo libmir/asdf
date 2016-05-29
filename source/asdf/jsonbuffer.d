@@ -136,7 +136,7 @@ package struct JsonBuffer
 		{
 			foreach(chunk; str.representation.chunks(256))
 			{
-				if(chunk.length + length + 16 > buffer.length)
+				if(chunk.length * 2 + length + 16 > buffer.length)
 				{
 					flush;
 				}
