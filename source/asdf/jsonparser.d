@@ -467,8 +467,8 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 
 						if(ecx == 16)
 						{
-							shift += r.length;
-							len += r.length;
+							shift += d.length;
+							len += d.length;
 							r = null;
 
 							oa.shift = shift;
@@ -563,6 +563,28 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 		}
 	}
 
+	unittest
+	{
+		import std.string;
+		import std.range;
+		static immutable str = `"1234567890qwertyuiopasdfghjklzxcvbnm"`;
+		auto data = Asdf(str[1..$-1]);
+		assert(data == parseJson(str));
+		foreach(i; 1 .. str.length)
+			assert(data == parseJson(str.representation.chunks(i)));
+	}
+
+	unittest
+	{
+		import std.string;
+		import std.range;
+		static immutable str = `"\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/"`;
+		auto data = Asdf("\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/");
+		assert(data == parseJson(str));
+		foreach(i; 1 .. str.length)
+			assert(data == parseJson(str.representation.chunks(i)));
+	}
+
 	// reads a number
 	sizediff_t readNumberImpl(ubyte c)
 	{
@@ -577,7 +599,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 			OL: for(;;)
 			{
 				if(setFrontRange == false)
-					return 0;
+				{
+					oa.put1(cast(ubyte)len, s);
+					return len + 2;
+				}
 				auto d = r;
 				auto ptr = oa.data.ptr;
 				auto datalen = oa.data.length;
@@ -632,13 +657,11 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 							case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
 							case 0x0  : break;
 						}
-
 						storeUnaligned!ubyte16(str1, ptr + shift);
-
 						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
 						shift += ecx;
 						len += ecx;
-						r = d = d[ecx .. $];
+						r = d[ecx .. $];
 						oa.shift = shift;
 
 						if(ecx == d.length)
@@ -676,6 +699,17 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 				}
 			}
 		}
+	}
+
+	unittest
+	{
+		import std.string;
+		import std.range;
+		import std.conv;
+		static immutable str = `941763918276349812734691287354912873459128635412037501236410234567123847512983745126`;
+		assert(str == parseJson(str).to!string);
+		foreach(i; 1 .. str.length)
+			assert(str == parseJson(str.representation.chunks(i)).to!string);
 	}
 
 	// reads `ull`, `rue`, or `alse`

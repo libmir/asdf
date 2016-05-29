@@ -10,7 +10,8 @@
 		},
 		{
 			"name": "native-sse42",
-			"versions-ldc": ["SSE42"]
+			"versions-ldc": ["SSE42"],
+			"dflags-ldc": ["-mcpu=native"],
 		}
 	]
 }
