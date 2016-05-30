@@ -6,7 +6,7 @@ package struct JsonBuffer
 	// current buffer length
 	size_t length;
 
-	char[4096] buffer = void;
+	char[4096 * 4] buffer = void;
 
 	/+
 	Puts char
