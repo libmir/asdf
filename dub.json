@@ -1,7 +1,17 @@
 {
 	"name": "asdf",
 	"description": "A Simple Document Format",
-	"license": "MIT",
+	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko"],
-	"copyright": "Tamedia Digital, 2016"
+	"copyright": "Tamedia Digital, 2016",
+	"configurations": [
+		{
+			"name":"generic"
+		},
+		{
+			"name": "native-sse42",
+			"versions-ldc": ["SSE42"],
+			"dflags-ldc": ["-mcpu=native"],
+		}
+	]
 }

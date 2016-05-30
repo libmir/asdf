@@ -19,11 +19,7 @@ import std.exception;
 import std.range.primitives;
 import std.typecons;
 
-version(X86)
-	version = X86_Any;
-
-version(X86_64)
-	version = X86_Any;
+import asdf.jsonbuffer;
 
 ///
 class AsdfException: Exception
@@ -146,117 +142,11 @@ struct Asdf
 	}
 
 	///
-	void toString(Dg)(scope Dg sink)
+	void toString(scope void delegate(const(char)[]) sink)
 	{
-		enforce!EmptyAsdfException(data.length);
-		auto t = data[0];
-		switch(t)
-		{
-			case Kind.null_:
-				enforceValidAsdf(data.length == 1, t);
-				sink("null");
-				break;
-			case Kind.true_:
-				enforceValidAsdf(data.length == 1, t);
-				sink("true");
-				break;
-			case Kind.false_:
-				enforceValidAsdf(data.length == 1, t);
-				sink("false");
-				break;
-			case Kind.number:
-				enforceValidAsdf(data.length > 1, t);
-				size_t length = data[1];
-				enforceValidAsdf(data.length == length + 2, t);
-				sink(cast(string) data[2 .. $]);
-				break;
-			case Kind.string:
-				enforceValidAsdf(data.length >= 5, Kind.object);
-				enforceValidAsdf(data.length == length4 + 5, t);
-				sink("\"");
-				sink(cast(string) data[5 .. $]);
-				sink("\"");
-				break;
-			default:
-				// Uses internal buffer for object and arrays.
-				// This makes formatting 3-4 times faster.
-				static struct Buffer
-				{
-					Dg sink;
-					// current buffer length
-					size_t length;
-
-					char[4096] buffer;
-
-					void put(char c)
-					{
-						if(length == buffer.length)
-						{
-							sink(buffer[0 .. length]);
-							length = 0;
-						}
-						buffer[length++] = c;
-					}
-
-					/+
-					Uses compile time loop for values `null`, `true`, `false`
-					+/
-					void put(string str)()
-					{
-						size_t newLength = length + str.length;
-						if(newLength > buffer.length)
-						{
-							sink(buffer[0 .. length]);
-							length = 0;
-							newLength = str.length;
-						}
-						import asdf.utility;
-						// compile time loop
-						foreach(i; Iota!(0, str.length))
-							buffer[length + i] = str[i];
-						length = newLength;
-					}
-
-					/+
-					Params:
-						small = if string length less or equal 255.
-							Keys and numbers have small lengths.
-						str = string to write
-					+/
-					void put(bool small = false)(in char[] str)
-					{
-						size_t newLength = length + str.length;
-						if(newLength > buffer.length)
-						{
-							sink(buffer[0 .. length]);
-							length = 0;
-							newLength = str.length;
-							static if(!small)
-							{
-								if(str.length > buffer.length)
-								{
-									sink(str);
-									return;
-								}
-							}
-						}
-						buffer[length .. newLength] = str;
-						length = newLength;
-					}
-
-					/+
-					Sends to `sink` remaining data.
-					+/
-					void flush()
-					{
-						sink(buffer[0 .. length]);
-						length = 0;
-					}
-				}
-				scope buffer = Buffer(sink);
-				toStringImpl!Buffer(buffer);
-				buffer.flush;
-		}
+		scope buffer = JsonBuffer(sink);
+		toStringImpl(buffer);
+		buffer.flush;
 	}
 
 	/+
@@ -264,7 +154,7 @@ struct Asdf
 	Params:
 		sink = output range that accepts `char`, `in char[]` and compile time string `(string str)()`
 	+/
-	private void toStringImpl(Buffer)(ref Buffer sink)
+	private void toStringImpl(ref JsonBuffer sink)
 	{
 		enforce!EmptyAsdfException(data.length);
 		auto t = data[0];
@@ -286,13 +176,13 @@ struct Asdf
 				enforceValidAsdf(data.length > 1, t);
 				size_t length = data[1];
 				enforceValidAsdf(data.length == length + 2, t);
-				sink.put(cast(string) data[2 .. $]);
+				sink.putSmallEscaped(cast(const(char)[]) data[2 .. $]);
 				break;
 			case Kind.string:
 				enforceValidAsdf(data.length >= 5, Kind.object);
 				enforceValidAsdf(data.length == length4 + 5, t);
 				sink.put('"');
-				sink.put!true(cast(string) data[5 .. $]);
+				sink.put(cast(const(char)[]) data[5 .. $]);
 				sink.put('"');
 				break;
 			case Kind.array:
@@ -320,14 +210,14 @@ struct Asdf
 					break;
 				}
 				sink.put!"{\"";
-				sink.put!true(pairs.front.key);
+				sink.put(pairs.front.key);
 				sink.put!"\":";
 				pairs.front.value.toStringImpl(sink);
 				pairs.popFront;
 				foreach(e; pairs)
 				{
 					sink.put!",\"";
-					sink.put!true(e.key);
+					sink.put(e.key);
 					sink.put!"\":";
 					e.value.toStringImpl(sink);
 				}

@@ -38,3 +38,4 @@ unittest
 
 public import asdf.asdf;
 public import asdf.jsonparser;
+public import asdf.serialization;

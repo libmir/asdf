@@ -45,13 +45,13 @@ unittest
 		static DateTimeProxy deserialize(Asdf data)
 		{
 			string val;
-			deserializeEscapedString(data, val);
+			deserializeScopedString(data, val);
 			return DateTimeProxy(DateTime.fromISOString(val));
 		}
 
 		void serialize(S)(ref S serializer)
 		{
-			serializer.putEscapedStringValue(datetime.toISOString);
+			serializer.putValue(datetime.toISOString);
 		}
 	}
 
@@ -66,19 +66,14 @@ unittest
 
 		@serializationKeys("bar_common", "bar")
 		string bar;
-		
-		@serializationKeys("bar_escaped")
-		@serialization("escaped")
-		string barEscaped;
 	}
 
-	enum json = `{"time":"20160304T000000","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'","bar_escaped":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+	enum json = `{"time":"20160304T000000","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
 	auto value = S(
 		DateTime(2016, 3, 4), 
 		new C,
 		[E.a : "A"],
-		"escaped chars = '\\', '\"', '\t', '\r', '\n'",
-		`escaped chars = '\\', '\"', '\t', '\r', '\n'`);
+		"escaped chars = '\\', '\"', '\t', '\r', '\n'");
 	assert(serializeToJson(value) == json);
 	assert(serializeToAsdf(value).to!string == json);
 	assert(deserialize!S(json).serializeToJson == json);
@@ -92,7 +87,7 @@ unittest
 		string a;
 		int b;
 
-		void finalizeSerialization(Serializer)(Serializer serializer)
+		void finalizeSerialization(Serializer)(ref Serializer serializer)
 		{
 			serializer.putKey("c");
 			serializer.putValue(100);
@@ -161,9 +156,11 @@ class DeserializationException: AsdfException
 string serializeToJson(V)(auto ref V value)
 {
 	import std.array;
-	auto ser = jsonSerializer(appender!string);
+	auto app = appender!(char[]);
+	auto ser = jsonSerializer(&app.put!(const(char)[]));
 	ser.serializeValue(value);
-	return ser.app.data;
+	ser.flush;
+	return cast(string) app.data;
 }
 
 ///
@@ -184,6 +181,7 @@ Asdf serializeToAsdf(V)(auto ref V value, size_t initialLength = 32)
 	import std.array;
 	auto ser = asdfSerializer(initialLength);
 	ser.serializeValue(value);
+	ser.flush;
 	return ser.app.result;
 }
 
@@ -302,38 +300,11 @@ Attribute to ignore field during serialization.
 enum Serialization serializationIgnoreOut = serialization("ignore-out");
 
 /++
-Attributes to skip escape characters decoding.
 Can be applied only to strings fields.
 Does not allocate new data when desalinizing. Raw ASDF data is used for strings instead of new memory allocation.
 Use this attributes only for strings that would not be used after ASDF deallocation.
 +/
-enum Serialization serializationEscaped = serialization("escaped");
-
-/// ditto
-enum Serialization serializationEscapedIn = serialization("escaped-in");
-
-/// ditto
-enum Serialization serializationEscapedOut = serialization("escaped-out");
-
-///
-unittest
-{
-	static struct G
-	{
-		string c;
-	}
-
-	static struct S
-	{
-		@serializationEscaped:
-		string a;
-		string b;
-		G g;
-	}
-
-	assert(`{"a":"a\ta", "b":"b\"b", "g": {"c": "c\tc"}}`
-		.deserialize!S == S(`a\ta`, `b\"b`, G("c\tc")));
-}
+enum Serialization serializationScoped = serialization("scoped");
 
 /++
 Attributes for in and out transformations.
@@ -375,11 +346,18 @@ unittest
 }
 
 /// JSON serialization back-end
-struct JsonSerializer(Buffer)
-	if (isOutputRange!(Buffer, char))
+struct JsonSerializer
 {
-	/// String buffer
-	Buffer app;
+	import asdf.jsonbuffer;
+
+	/// JSON string buffer
+	JsonBuffer sink;
+
+	///
+	this(void delegate(const(char)[]) sink)
+	{
+		this.sink.sink = sink;
+	}
 
 	private uint state;
 
@@ -398,34 +376,34 @@ struct JsonSerializer(Buffer)
 	private void incState()
 	{
 		if(state++)
-			app.put(',');
+			sink.put(',');
 	}
 
 	/// Serialization primitives
 	uint objectBegin()
 	{
-		app.put('{');
+		sink.put('{');
 		return popState;
 	}
 
 	///ditto
 	void objectEnd(uint state)
 	{
-		app.put('}');
+		sink.put('}');
 		pushState(state);
 	}
 
 	///ditto
 	uint arrayBegin()
 	{
-		app.put('[');
+		sink.put('[');
 		return popState;
 	}
 
 	///ditto
 	void arrayEnd(uint state)
 	{
-		app.put(']');
+		sink.put(']');
 		pushState(state);
 	}
 
@@ -433,54 +411,47 @@ struct JsonSerializer(Buffer)
 	void putEscapedKey(in char[] key)
 	{
 		incState;
-		app.put('\"');
-		app.put(key);
-		app.put('\"');
-		app.put(':');
+		sink.put('\"');
+		sink.putSmallEscaped(key);
+		sink.put!"\":";
 	}
 
 	///ditto
 	void putKey(in char[] key)
 	{
 		incState;
-		app.put('\"');
-		app.putCommonString(key);
-		app.put('\"');
-		app.put(':');
-	}
-
-	///ditto
-	void putEscapedStringValue(in char[] str)
-	{
-		app.put('\"');
-		app.put(str);
-		app.put('\"');
+		sink.put('\"');
+		sink.put(key);
+		sink.put!"\":";
 	}
 
 	///ditto
 	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
 	{
-		app.formatValue(num, fmt);
+		formatValue(&sink.putSmallEscaped, num, fmt);
 	}
 
 	///ditto
 	void putValue(typeof(null))
 	{
-		app.put("null");
+		sink.put("null");
 	}
 
 	///ditto
 	void putValue(bool b)
 	{
-		app.put(b ? "true" : "false");
+		if(b)
+			sink.put!"true";
+		else
+			sink.put!"false";
 	}
 
 	///ditto
 	void putValue(in char[] str)
 	{
-		app.put('\"');
-		app.putCommonString(str);
-		app.put('\"');
+		sink.put('\"');
+		sink.put(str);
+		sink.put('\"');
 	}
 
 	///ditto
@@ -495,12 +466,18 @@ struct JsonSerializer(Buffer)
 	{
 		incState;
 	}
+
+	///ditto
+	void flush()
+	{
+		sink.flush;
+	}
 }
 
 /// Create JSON serialization back-end
-auto jsonSerializer(Appender)(auto ref Appender appender)
+auto jsonSerializer(scope void delegate(const(char)[]) sink)
 {
-	return JsonSerializer!Appender(appender);
+	return JsonSerializer(sink);
 }
 
 ///
@@ -509,7 +486,8 @@ unittest
 	import std.array;
 	import std.bigint;
 
-	auto ser = jsonSerializer(appender!string);
+	auto app = appender!string;
+	auto ser = jsonSerializer(&app.put!(const(char)[]));
 	auto state0 = ser.objectBegin;
 
 		ser.putEscapedKey("null");
@@ -527,8 +505,9 @@ unittest
 		ser.arrayEnd(state1);
 	
 	ser.objectEnd(state0);
+	ser.flush;
 
-	assert(ser.app.data == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
+	assert(app.data == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
 }
 
 /// ASDF serialization back-end
@@ -568,27 +547,14 @@ struct AsdfSerializer
 	}
 
 	///ditto
-	void putEscapedKey(in char[] key)
-	{
-		assert(key.length < ubyte.max);
-		app.put1(cast(ubyte) key.length);
-		app.put(key);
-	}
+	alias putEscapedKey = putKey;
 
 	///ditto
 	void putKey(in char[] key)
 	{
 		auto sh = app.skip(1);
-		app.putCommonString(key);
+		app.put(key);
 		app.put1(cast(ubyte)(app.shift - sh - 1), sh);
-	}
-
-	///ditto
-	void putEscapedStringValue(in char[] str)
-	{
-		app.put1(Asdf.Kind.string);
-		app.put4(cast(uint)str.length);
-		app.put(str);
 	}
 
 	///ditto
@@ -617,7 +583,7 @@ struct AsdfSerializer
 	{
 		app.put1(Asdf.Kind.string);
 		auto sh = app.skip(4);
-		app.putCommonString(str);
+		app.put(str);
 		app.put4(cast(uint)(app.shift - sh - 4), sh);
 	}
 
@@ -629,7 +595,12 @@ struct AsdfSerializer
 	}
 
 	///ditto
-	void elemBegin()
+	static void elemBegin()
+	{
+	}
+
+	///ditto
+	static void flush()
 	{
 	}
 }
@@ -850,28 +821,12 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 					static if(hasSerializedAs!(__traits(getMember, value, member)))
 					{
 						alias Proxy = getSerializedAs!(__traits(getMember, value, member));
-						static if (is(Proxy : const(char)[])
-								&& isEscapedOut(S.stringof, member, udas))
-						{
-							serializer.putEscapedStringValue(val.to!Proxy);
-						}
-						else
-						{
-							serializer.serializeValue(val.to!Proxy);
-						}
+						serializer.serializeValue(val.to!Proxy);
 					}
 					else
 					static if(__traits(compiles, serializer.serializeValue(val)))
 					{
-						static if (is(typeof(__traits(getMember, value, member)) : const(char)[])
-							&& isEscapedOut(S.stringof, member, udas))
-						{
-							serializer.putEscapedStringValue(val);
-						}
-						else
-						{
-							serializer.serializeValue(val);
-						}
+						serializer.serializeValue(val);
 					}
 				}
 			}
@@ -892,7 +847,7 @@ unittest
 		{
 			auto state = serializer.objectBegin;
 			serializer.putEscapedKey("foo");
-			serializer.putEscapedStringValue("bar");
+			serializer.putValue("bar");
 			serializer.objectEnd(state);
 		}
 	}
@@ -962,10 +917,10 @@ unittest
 }
 
 /++
-Deserialize escaped string value
+Deserialize scoped string value
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
-void deserializeEscapedString(V)(Asdf data, ref V value)
+void deserializeScopedString(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
 	auto kind = data.kind;
@@ -990,7 +945,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	with(Asdf.Kind) switch(kind)
 	{
 		case string:
-			value = cast(V) cast(V) (cast(const(char)[]) data.data[5 .. $]).toCommonString;
+			value = cast(V) cast(V) (cast(const(char)[]) data.data[5 .. $]);
 			return;
 		case null_:
 			value = null;
@@ -1193,8 +1148,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
-								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, proxy));
-								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
+								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
 						
 					Proxy proxy;
 					Fun(elem.value, proxy);
@@ -1204,8 +1159,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							else
 							static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
-								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, __traits(getMember, value, member)));
-								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
+								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
+								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
 
 					Fun(elem.value, __traits(getMember, value, member));
 
@@ -1214,8 +1169,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							{
 					Type val;
 
-								enum F = isEscapedIn(V.stringof, member, udas) && __traits(compiles, .deserializeEscapedString(elem.value, val));
-								alias Fun = Select!(F, .deserializeEscapedString, .deserializeValue);
+								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, val));
+								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
 
 					Fun(elem.value, val);
 					__traits(getMember, value, member) = val;
@@ -1331,38 +1286,17 @@ private template getTransformOut(alias value)
 	alias getTransformOut = _list[0];
 }
 
-private bool isEscapedOut(string type, string member, Serialization[] attrs)
+private bool isScoped(string type, string member, Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = unaryFun!(a =>
-		a.args[0] == "escaped"
-		||
-		a.args[0] == "escaped-out"
-		);
+	alias pred = unaryFun!(a => a.args[0] == "scoped");
 	auto c = attrs.count!pred;
 	if(c == 0)
 		return false;
 	if(c == 1)
 		return true;
 	throw new Exception(type ~ "." ~ member ~
-		` : Only single declaration of "escaped" / "escaped-out" serialization attribute is allowed`);
-}
-
-private bool isEscapedIn(string type, string member, Serialization[] attrs)
-{
-	import std.algorithm.searching: canFind, find, startsWith, count;
-	alias pred = unaryFun!(a =>
-		a.args[0] == "escaped"
-		||
-		a.args[0] == "escaped-in"
-		);
-	auto c = attrs.count!pred;
-	if(c == 0)
-		return false;
-	if(c == 1)
-		return true;
-	throw new Exception(type ~ "." ~ member ~
-		` : Only single declaration of "escaped" / "escaped-in" serialization attribute is allowed`);
+		` : Only single declaration of "scoped" / "scoped-in" serialization attribute is allowed`);
 }
 
 private string keyOut(string type, string member, Serialization[] attrs)
@@ -1419,82 +1353,6 @@ private bool ignoreIn(Serialization[] attrs)
 			);
 }
 
-private void putCommonString(Appender)(auto ref Appender app, in char[] str)
-{
-	import std.string: representation;
-	foreach(ref e; str.representation)
-	{
-		if(e < ' ')
-		{
-			app.put('\\');
-			switch(e)
-			{
-				case '\t':
-					app.put('t');
-					continue;
-				case '\r':
-					app.put('r');
-					continue;
-				case '\n':
-					app.put('n');
-					continue;
-				default:
-					import std.format: format;
-					throw new UTFException(format("unexpected char \\x%X", e));
-			}
-		}
-		if(e == '\\')
-		{
-			app.put('\\');
-			app.put('\\');
-			continue;
-		}
-		if(e == '\"')
-		{
-			app.put('\\');
-			app.put('\"');
-			continue;
-		}
-		app.put(e);
-	}
-}
-
-private string toCommonString(in char[] str)
-{
-	import std.array: appender;
-	auto app = appender!(ubyte[]);
-	app.reserve(str.length);
-	for(size_t i; i < str.length; i++)
-	{
-		ubyte c = str[i];
-		if(c == '\\')
-		{
-			i++;
-			if(i == str.length)
-				throw new AsdfException("Asdf string value is broken");
-			c = str[i];
-			switch(c)
-			{
-				case '\"':
-				case '\\':
-					break;
-				case 't':
-					c = '\t';
-					break;
-				case 'r':
-					c = '\r';
-					break;
-				case 'n':
-					c = '\n';
-					break;
-				default:
-					throw new AsdfException("Asdf string value is broken");
-			}
-		}
-		app.put(c);
-	}
-	return cast(string) app.data;
-}
 
 private bool privateOrPackage(string protection)
 {

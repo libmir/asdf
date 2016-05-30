@@ -21,3 +21,9 @@ examples/filter_and_arrays/filter_and_arrays
 examples/arrays_count/arrays_count
 
 *.sublime-workspace
+
+*.s
+
+__test__native-sse42__
+
+__test__generic__
