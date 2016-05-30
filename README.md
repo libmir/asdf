@@ -7,7 +7,7 @@
 
 ASDF is a cache oriented string based JSON representation.
 It allows to easily iterate over JSON arrays/objects multiple times without parsing them.
-ASDF does not parse numbers (they are represented as strings) and does not decode escape sequence in JSON strings.
+ASDF does not parse numbers (they are represented as strings).
 ASDF values can be removed by setting `deleted` bit on.
 
 For line separated JSON values see `parseJsonByLine` function.
@@ -140,13 +140,13 @@ struct DateTimeProxy
 	static DateTimeProxy deserialize(Asdf data)
 	{
 		string val;
-		deserializeEscapedString(data, val);
+		deserializeScopedString(data, val);
 		return DateTimeProxy(DateTime.fromISOString(val));
 	}
 
 	void serialize(S)(ref S serializer)
 	{
-		serializer.putEscapedStringValue(datetime.toISOString);
+		serializer.putValue(datetime.toISOString);
 	}
 }
 ```
