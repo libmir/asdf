@@ -306,32 +306,6 @@ Use this attributes only for strings that would not be used after ASDF deallocat
 +/
 enum Serialization serializationScoped = serialization("scoped");
 
-/////
-//unittest
-//{
-//	static struct G
-//	{
-//		string c;
-//	}
-
-//	static struct S
-//	{
-//		@serializationEscaped:
-//		string a;
-//		string b;
-//		G g;
-//	}
-
-//	assert(`{"a":"a\ta", "b":"b\"b", "g": {"c": "c\tc"}}`
-//		.deserialize!S == S("a\ta", "b\"b", G("c\tc")));
-//}
-
-/++
-Attributes to skip escape characters decoding.
-Can be applied only to strings fields.
-+/
-enum Serialization serializationEscaped = serialization("escaped");
-
 /++
 Attributes for in and out transformations.
 Return type of in transformation must be implicitly convertable to the type of the field.
@@ -943,7 +917,7 @@ unittest
 }
 
 /++
-Deserialize escaped string value
+Deserialize scoped string value
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
 void deserializeScopedString(V)(Asdf data, ref V value)
@@ -1322,7 +1296,7 @@ private bool isScoped(string type, string member, Serialization[] attrs)
 	if(c == 1)
 		return true;
 	throw new Exception(type ~ "." ~ member ~
-		` : Only single declaration of "escaped" / "escaped-in" serialization attribute is allowed`);
+		` : Only single declaration of "scoped" / "scoped-in" serialization attribute is allowed`);
 }
 
 private string keyOut(string type, string member, Serialization[] attrs)
