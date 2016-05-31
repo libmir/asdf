@@ -160,7 +160,7 @@ auto parseJsonByLine(
 					length = asdf.pop;
 				}
 			}
-			_nextEmpty = length ? asdf.refresh : 0;
+			_nextEmpty = length ? !asdf.setFrontRange : 0;
 		}
 
 		auto front() @property
@@ -206,19 +206,6 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 	const(ubyte)[] r;
 	Chunks chunks;
 	OutputArray oa;
-
-	bool refresh() @property
-	{
-		if(r.length == 0)
-		{
-			assert(!chunks.empty);
-			chunks.popFront;
-			if(chunks.empty)
-				return true;
-			r = chunks.front;
-		}
-		return false;
-	}
 
 	bool setFrontRange()
 	{
