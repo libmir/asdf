@@ -23,12 +23,8 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 
 #### I/O Speed
 
- - Reading JSON line separated values and parsing them to ASDF - 250+ MB per second (SSD).
+ - Reading JSON line separated values and parsing them to ASDF - 300+ MB per second (SSD).
  - Writing ASDF range to JSON line separated values - 300+ MB per second (SSD).
-
-#### TODO
-
-1. X86-64 string optimizations for LDC.
 
 #### ASDF Example
 
