@@ -156,3 +156,25 @@ struct S
 	DateTime time;
 }
 ```
+
+
+#### Finalizer:
+```
+	static struct S
+	{
+		string a;
+		int b;
+
+		@serializationIgnoreIn
+		double sum;
+
+		void finalizeDeserialization(Asdf data)
+		{
+			auto r = data["c", "d"];
+			auto a = r["e"].get(0.0);
+			auto b = r["g"].get(0.0);
+			sum = a + b;
+		}
+	}
+	assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
+```
