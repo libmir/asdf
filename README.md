@@ -158,8 +158,8 @@ struct S
 ```
 
 
-#### Finalizer:
-```
+##### Finalizer
+```d
 	static struct S
 	{
 		string a;
