@@ -27,3 +27,7 @@ examples/arrays_count/arrays_count
 __test__native-sse42__
 
 __test__generic__
+
+.generated
+
+web
