@@ -733,7 +733,7 @@ void serializeValue(S, T)(ref S serializer, auto ref T[string] value)
 	foreach (key, ref val; value)
 	{
 		serializer.putKey(key);
-		serializer.putValue(val);
+		serializer.serializeValue(val);
 	}
 	serializer.objectEnd(state);
 }
@@ -824,7 +824,6 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 						serializer.serializeValue(val.to!Proxy);
 					}
 					else
-					static if(__traits(compiles, serializer.serializeValue(val)))
 					{
 						serializer.serializeValue(val);
 					}
