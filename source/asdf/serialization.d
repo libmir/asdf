@@ -251,6 +251,14 @@ struct Serialization
 	string[] args;
 }
 
+/// Additional serialization attribute type
+struct SerializationGroup
+{
+	/// 2D string list
+	string[][] args;
+}
+
+
 /// Returns Serialization with the `args` list.
 private Serialization serialization(string[] args...)
 {
@@ -267,6 +275,17 @@ Serialization serializationKeys(string[] keys...)
 	return serialization("keys" ~ keys);
 }
 
+///
+unittest
+{
+	static struct S
+	{
+		@serializationKeys("b", "a")
+		string s;
+	}
+	assert(`{"a":"d"}`.deserialize!S.serializeToJson == `{"b":"d"}`);
+}
+
 /++
 Attribute for key overloading during deserialization.
 +/
@@ -274,6 +293,38 @@ Serialization serializationKeysIn(string[] keys...)
 {
 	assert(keys.length, "use @serializationIgnoreIn or at least one key");
 	return serialization("keys-in" ~ keys);
+}
+
+///
+unittest
+{
+	static struct S
+	{
+		@serializationKeysIn("a")
+		string s;
+	}
+	assert(`{"a":"d"}`.deserialize!S.serializeToJson == `{"s":"d"}`);
+}
+
+/++
+Attribute for key overloading during deserialization.
+
+Attention: `serializationMultiKeysIn` is mot optimized yet and may significantly slowdown deserialization.
++/
+SerializationGroup serializationMultiKeysIn(string[][] keys...)
+{
+	return SerializationGroup(keys.dup);
+}
+
+///
+unittest
+{
+	static struct S
+	{
+		@serializationMultiKeysIn(["a", "b", "c"])
+		string s;
+	}
+	assert(`{"a":{"b":{"c":"d"}}}`.deserialize!S.s == "d");
 }
 
 /++
@@ -284,20 +335,67 @@ Serialization serializationKeyOut(string key)
 	return serialization("key-out", key);
 }
 
+///
+unittest
+{
+	static struct S
+	{
+		@serializationKeyOut("a")
+		string s;
+	}
+	assert(`{"s":"d"}`.deserialize!S.serializeToJson == `{"a":"d"}`);
+}
+
 /++
 Attribute to ignore fields.
 +/
 enum Serialization serializationIgnore = serialization("ignore");
+
+///
+unittest
+{
+	static struct S
+	{
+		@serializationIgnore
+		string s;
+	}
+	assert(`{"s":"d"}`.deserialize!S.s == null);
+	assert(S("d").serializeToJson == `{}`);
+}
 
 /++
 Attribute to ignore field during deserialization.
 +/
 enum Serialization serializationIgnoreIn = serialization("ignore-in");
 
+///
+unittest
+{
+	static struct S
+	{
+		@serializationIgnoreIn
+		string s;
+	}
+	assert(`{"s":"d"}`.deserialize!S.s == null);
+	assert(S("d").serializeToJson == `{"s":"d"}`);
+}
+
 /++
 Attribute to ignore field during serialization.
 +/
 enum Serialization serializationIgnoreOut = serialization("ignore-out");
+
+///
+unittest
+{
+	static struct S
+	{
+		@serializationIgnoreOut
+		string s;
+	}
+	assert(`{"s":"d"}`.deserialize!S.s == "d");
+	assert(S("d").serializeToJson == `{}`);
+}
 
 /++
 Can be applied only to strings fields.
@@ -305,6 +403,21 @@ Does not allocate new data when desalinizing. Raw ASDF data is used for strings 
 Use this attributes only for strings that would not be used after ASDF deallocation.
 +/
 enum Serialization serializationScoped = serialization("scoped");
+
+///
+unittest
+{
+	import std.uuid;
+
+	static struct S
+	{
+		@serializationScoped
+		@serializedAs!string
+		UUID id;
+	}
+	assert(`{"id":"8AB3060E-2cba-4f23-b74c-b52db3bdfb46"}`.deserialize!S.id
+				==  UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46"));
+}
 
 /++
 Attributes for in and out transformations.
@@ -1188,6 +1301,68 @@ void deserializeValue(V)(Asdf data, ref V value)
 					}
 				}
 				default:
+			}
+		}
+		foreach(member; __traits(allMembers, V))
+		{
+			static if(
+				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+				&&
+				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
+			{
+				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
+				static if(!ignoreIn(udas))
+				{
+					enum target = [getUDAs!(__traits(getMember, value, member), SerializationGroup)];
+					static if(target.length)
+					{
+						static assert(target.length == 1, member ~ ": only one @serializationKeysIn(string[][]...) is allowed.");
+						foreach(ser; target[0].args)
+						{
+							auto d = data[ser];
+							if(d.data.length)
+							{
+								alias Type = typeof(__traits(getMember, value, member));
+								static if(hasSerializedAs!(__traits(getMember, value, member)))
+								{
+									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, proxy));
+									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+							
+									Proxy proxy;
+									Fun(d, proxy);
+									__traits(getMember, value, member) = proxy.to!Type;
+								}
+								else
+								static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+								{
+									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
+									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+
+									Fun(d, __traits(getMember, value, member));
+
+								}
+								else
+								{
+									Type val;
+
+									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, val));
+									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+
+									Fun(elem.value, val);
+									__traits(getMember, value, member) = val;
+
+								}
+
+								static if(hasTransformIn!(__traits(getMember, value, member)))
+								{
+									alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
+									__traits(getMember, value, member) = f(__traits(getMember, value, member));
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 		static if(__traits(compiles, value.finalizeDeserialization(data)))
