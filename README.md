@@ -26,6 +26,22 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
  - Reading JSON line separated values and parsing them to ASDF - 300+ MB per second (SSD).
  - Writing ASDF range to JSON line separated values - 300+ MB per second (SSD).
 
+#### current transformation functions
+
+| uda | function |
+| ------------- |:-------------:|
+| `@serializationKeys("bar_common", "bar")` | tries to read the data 
+| `@serializationKeysIn("a", "b")` | tries to read the data from `b`, then `b` |
+| `@serializationMultiKeysIn(["a", "b", "c"])`  | tries to get the data from a sub object. this has not optimal performance yet if you are using more than 1 serializationMultiKeysIn in an object |
+| `@serializationIgnore` | ignore this property completely |
+| `@serializationIgnoreIn` | don't read this property |
+| `@serializationIgnoreOut` | don't write this property |
+| `@serializationScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
+| `@serializedAs!string` | call to!string |
+| `@serializationTransformIn!fin` | call function `fin` to transform the data |
+| ```@serializationTransformOut!`"str".repeat.take(a).joiner("_").to!string` int x```  | run function on serialization, different notation |
+
+
 #### ASDF Example
 
 ```D

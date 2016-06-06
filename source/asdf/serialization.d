@@ -399,7 +399,7 @@ unittest
 
 /++
 Can be applied only to strings fields.
-Does not allocate new data when desalinizing. Raw ASDF data is used for strings instead of new memory allocation.
+Does not allocate new data when deserializeing. Raw ASDF data is used for strings instead of new memory allocation.
 Use this attributes only for strings that would not be used after ASDF deallocation.
 +/
 enum Serialization serializationScoped = serialization("scoped");
