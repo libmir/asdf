@@ -14,7 +14,7 @@ ASDF values can be removed by setting `deleted` bit on.
 For line separated JSON values see `parseJsonByLine` function.
 This function accepts a range of chunks instead of a range of lines.
 
-Besides is a convinient Json Library for D that gets out of your way.
+Besides, it is a convenient Json Library for D that gets out of your way.
 ASDF is specially geared towards transforming JSON dataframes, either to new 
 JSON Objects or to custom data types.
 
