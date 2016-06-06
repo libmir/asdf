@@ -16,13 +16,13 @@ PROJECT=asdf
 PAGE_TOOLS=
 $(DIVID tools, $(DIV,
 	$(DIVC tip smallprint,
-		$(HTMLTAG3 a, href="https://github.com/libmir/mir/issues", Report a bug)
+		$(HTMLTAG3 a, href="https://github.com/tamediadigital/asdf/issues", Report a bug)
 		$(DIV,
 			If you spot a problem with this page, click here to create a Github issue.
 		)
 	)
 	$(DIVC tip smallprint,
-		<a href="https://github.com/libmir/mir/edit/master/$(SRCFILENAME)">Improve this page</a>
+		<a href="https://github.com/tamediadigital/asdf/edit/master/$(SRCFILENAME)">Improve this page</a>
 		$(DIV,
 			Quickly fork, edit online, and submit a pull request for this page.
 			Requires a signed-in GitHub account. This works well for small changes.
@@ -52,7 +52,6 @@ $(EXTRA_HEADERS)
 <body id='$(TITLE)' class='$(BODYCLASS)'>
 $(SCRIPT document.body.className += ' have-javascript')
 $(DIVID top, $(DIVC helper, $(DIVC helper expand-container,
-    $(DIVC logo, <a href="$(ROOT)"><img id="logo" alt="D Logo" src="$(STATIC images/mir.svg)"></a>)
     <a href="$(ROOT_DIR)menu.html" title="Menu" class="hamburger expand-toggle"><span>Menu</span></a>
     $(NAVIGATION)
     $(DIVC search-container expand-container,
@@ -82,7 +81,7 @@ SEARCH_BOX=
         <form method="get" action="https://google.com/search">
             <input type="hidden" id="domains" name="domains" value="dlang.org">
             <input type="hidden" id="sourceid" name="sourceid" value="google-search">
-            <input type="hidden" id="sitesearch" name="sitesearch" value="mir.dlang.io">
+            <input type="hidden" id="sitesearch" name="sitesearch" value="tamediadigital.github.io/asdf">
             $(SPANID search-query, <input id="q" name="q" placeholder="Search">)
             $(SPANID search-submit, <button type="submit"><i class="fa fa-search"></i><span>go</span></button>)
         </form>
@@ -92,9 +91,8 @@ _=
 NAVIGATION=
 $(DIVID cssmenu, $(UL
     $(MENU https://dlang.org, Dlang)
-    $(MENU https://github.com/libmir/mir, Github)
-    $(MENU https://github.com/libmir/mir/issues, Issues)
-    $(MENU https://gitter.im/libmir/public , Chat)
+    $(MENU https://github.com/tamediadigital/asdf, Github)
+    $(MENU https://github.com/tamediadigital/asdf/issues, Issues)
 ))
 _=
 

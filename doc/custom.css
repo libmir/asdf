@@ -2,10 +2,6 @@ span#search-query {
     width: 12em;
 }
 
-/*
-custom color for mir
-*/
-
 #top {
     background: rgba(23, 0, 185, 0.83);
     border-bottom: 1px #000000 solid;
