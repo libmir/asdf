@@ -67,8 +67,9 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 
 | uda | function |
 | ------------- |:-------------:|
-| `@serializationKeys("bar_common", "bar")` | tries to read the data 
-| `@serializationKeysIn("a", "b")` | tries to read the data from `b`, then `b` |
+| `@serializationKeys("bar_common", "bar")` | tries to read the data from either property. saves it to the first one |
+| `@serializationKeysIn("a", "b")` | tries to read the data from `b`, then `b`. last one occuring in the json wins |
+| `@serializationKeyOut("a")` | writes it to `a` |
 | `@serializationMultiKeysIn(["a", "b", "c"])`  | tries to get the data from a sub object. this has not optimal performance yet if you are using more than 1 serializationMultiKeysIn in an object |
 | `@serializationIgnore` | ignore this property completely |
 | `@serializationIgnoreIn` | don't read this property |
@@ -77,6 +78,7 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 | `@serializedAs!string` | call to!string |
 | `@serializationTransformIn!fin` | call function `fin` to transform the data |
 | `@serializationTransformOut!fout`  | run function on serialization, different notation |
+| ------------- |:-------------:|
 
 please also look into the Docs or Unittest for concrete examples!
 
