@@ -119,7 +119,7 @@ int main(string[] args)
     tree.sort();
 
     writeln("MODULE_MENU=");
-    tree["mir"].dumpRoot();
+    tree["asdf"].dumpRoot();
     writeln("_=");
     return 0;
 }
