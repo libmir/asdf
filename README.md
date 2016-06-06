@@ -77,8 +77,7 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 | `@serializationScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
 | `@serializedAs!string` | call to!string |
 | `@serializationTransformIn!fin` | call function `fin` to transform the data |
-| `@serializationTransformOut!fout`  | run function on serialization, different notation |
-| ------------- |:-------------:|
+| `@serializationTransformOut!fout`  | run function `fout` on serialization, different notation |
 
 please also look into the Docs or Unittest for concrete examples!
 
@@ -153,16 +152,13 @@ struct S
 struct S
 {
 	// ignored
-	@serializationIgnore
-	int temp;
+	@serializationIgnore int temp;
 	
 	// can be formatted to json
-	@serializationIgnoreIn
-	int a;
+	@serializationIgnoreIn int a;
 	
 	//can be parsed from json
-	@serializationIgnoreOut
-	int b;
+	@serializationIgnoreOut int b;
 }
 ```
 
@@ -171,8 +167,7 @@ struct S
 struct S
 {
 	// key is overrided to "aaa"
-	@serializationKeys("aaa")
-	int a;
+	@serializationKeys("aaa") int a;
 
 	// overloads multiple keys for parsing
 	@serializationKeysIn("b", "_b")
@@ -228,21 +223,21 @@ struct SomeDoublyLinkedList
 ```d
 struct S
 {
-	@serializedAs!DateTimeProxy
-	DateTime time;
+	@serializedAs!DateTimeProxy DateTime time;
 }
 ```
 
 
 ##### Finalizer
+If you need to do additional calculations or etl transformations that happen to depend on the deserialized data use the `finalizeDeserialization` method.
+
 ```d
 struct S
 {
 	string a;
 	int b;
 
-	@serializationIgnoreIn
-	double sum;
+	@serializationIgnoreIn double sum;
 
 	void finalizeDeserialization(Asdf data)
 	{
