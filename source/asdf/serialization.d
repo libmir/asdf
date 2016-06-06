@@ -799,9 +799,9 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		foreach(member; __traits(allMembers, V))
 		{
 			static if(
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member))
 				&&
-				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
+				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
