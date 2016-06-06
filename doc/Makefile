@@ -29,7 +29,7 @@ ASDF_PACKAGES = asdf
 
 PACKAGE_asdf = asdf jsonparser serialization package
 
-MOD_EXCLUDES= $(addprefix --ex=asdf., utility. jsonbuffer. outputaray. simd.)
+MOD_EXCLUDES= $(addprefix --ex=asdf., utility jsonbuffer outputarray simd)
 
 ###########################################################
 # Setup macros + generate dynamic info needed
