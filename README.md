@@ -14,6 +14,14 @@ ASDF values can be removed by setting `deleted` bit on.
 For line separated JSON values see `parseJsonByLine` function.
 This function accepts a range of chunks instead of a range of lines.
 
+Besides is a convinient Json Library for D that gets out of your way.
+ASDF is specially geared towards transforming JSON dataframes, either to new 
+JSON Objects or to custom data types.
+
+❗️: Currently all ASDF Method names and all UDAs are in DRAFT state, we might want want make them simpler. Please submit an Issue if you have input.
+
+❗️: ASDF is currently only very loosely validating jsons and with certain functions even silently and on purpose ignoring failing Objects (see below). 
+
 #### Why ASDF?
 
 ASDF is fast. It can be really helpful if you have gigabytes of JSON line separated values.
@@ -26,6 +34,8 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 
  - Reading JSON line separated values and parsing them to ASDF - 300+ MB per second (SSD).
  - Writing ASDF range to JSON line separated values - 300+ MB per second (SSD).
+
+ - 🚀 for extra speed powerups on X86 you can use `"subConfigurations": { "asdf": "native-sse42" }` in your `dub.json`. Watch it fly!
 
 #### current transformation functions
 
@@ -40,10 +50,11 @@ See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPEC
 | `@serializationScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
 | `@serializedAs!string` | call to!string |
 | `@serializationTransformIn!fin` | call function `fin` to transform the data |
-| ```@serializationTransformOut!`"str".repeat.take(a).joiner("_").to!string` int x```  | run function on serialization, different notation |
+| ```@serializationTransformOut!fout`  | run function on serialization, different notation |
 
+please also look into the Docs or Unittest for concrete examples!
 
-#### ASDF Example
+#### ASDF Example (incomplete)
 
 ```D
 import std.algorithm;

@@ -2,7 +2,7 @@
 	"name": "asdf",
 	"description": "A Simple Document Format",
 	"license": "BSL-1.0",
-	"authors": ["Ilya Yaroshenko"],
+	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
 	"configurations": [
 		{
