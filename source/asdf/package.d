@@ -24,7 +24,7 @@ unittest
 	import std.algorithm;
 	import asdf;
 
-	size_t femailsCount()
+	size_t femalesCount()
 	{
 		auto val = Asdf("Female");
 		return
