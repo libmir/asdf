@@ -51,10 +51,9 @@ void main()
 	assert(data.deserialize!Simple == o);
 }
 ```
+#### Documentation
 
-#### Specification
-
-See [ASDF Specification](https://github.com/tamediadigital/asdf/blob/master/SPECIFICATION.md).
+See ASDF [API](http://docs.asdf.dlang.io) and [Specification](https://github.com/tamediadigital/asdf/blob/master/SPECIFICATION.md).
 
 #### I/O Speed
 
