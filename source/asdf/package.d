@@ -1,7 +1,7 @@
 /++
 $(H2 ASDF Package)
 
-Publicly imports $(SUBMODULE asdf) and $(SUBMODULE jsonparser).
+Publicly imports $(SUBMODULE asdf), $(SUBMODULE jsonparser), and $(SUBMODULE serialization).
 
 Copyright: Tamedia Digital, 2016
 
