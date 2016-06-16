@@ -1,6 +1,6 @@
 {
 	"name": "asdf",
-	"description": "A Simple Document Format",
+	"description": "A Simple Document Format: JSON serialization library",
 	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
