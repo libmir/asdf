@@ -111,8 +111,8 @@ unittest
 }
 
 /++
-Parses JSON value in each line.
-ASDF value has empty data for invalid lines.
+Parses JSON value in each line from a Range of buffers.
+Note: Invalid lines generate an empty ASDF value.
 Params:
 	chunks = input range composed of elements type of `const(ubyte)[]`.
 		`chunks` can use the same buffer for each chunk.
@@ -199,6 +199,37 @@ unittest
 	assert(values.front.data == [2]);
 	values.popFront;
 	assert(values.empty);
+}
+
+/++
+Parses JSON value in each line within a string.
+Note: most probably you do not want this but operate directly on a buffer!
+Note: Invalid lines generate an empty ASDF value.
+Params:
+	text = string or const(char)[]
+	initLength = initial output buffer length. Minimal value equals 32.
+Returns:
+	Input range composed of ASDF values. Each value uses the same internal buffer.
++/
+auto parseJsonByLine(
+	Flag!"spaces" spaces = Yes.spaces, size_t initLength = 32)
+	(ref in const(char)[] text)
+{
+	import std.range: only;
+	return (cast(const(ubyte[]))text).only.parseJsonByLine!spaces(initLength);
+}
+
+unittest
+{
+	import std.conv;
+	import std.algorithm : map;
+	import std.range : array;
+	string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" `{"key2": "b"}`;
+	auto values = text.parseJsonByLine();
+	assert( values.front["key"] == "a");
+	values.popFront;
+	assert( values.front["key2"] == "b");
+	values.popFront;
 }
 
 package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
