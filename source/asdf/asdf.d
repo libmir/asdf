@@ -156,7 +156,7 @@ struct Asdf
 	+/
 	private void toStringImpl(ref JsonBuffer sink)
 	{
-		enforce!EmptyAsdfException(data.length);
+		enforce!EmptyAsdfException(data.length, "data buffer is empty");
 		auto t = data[0];
 		switch(t)
 		{
