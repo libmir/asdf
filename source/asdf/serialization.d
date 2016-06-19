@@ -152,12 +152,18 @@ class DeserializationException: AsdfException
 	}
 }
 
-/// JSON serialization function
-string serializeToJson(string sep = "", V)(auto ref V value)
+/// JSON serialization function.
+string serializeToJson(V)(auto ref V value)
+{
+	return serializeToJsonPretty!""(value);
+}
+
+/// JSON serialization function with pretty formatting.
+string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
 {
 	import std.array;
 	auto app = appender!(char[]);
-	auto ser = jsonSerializer!sep(&app.put!(const(char)[]));
+	auto ser = jsonSerializer!""(&app.put!(const(char)[]));
 	ser.serializeValue(value);
 	ser.flush;
 	return cast(string) app.data;
