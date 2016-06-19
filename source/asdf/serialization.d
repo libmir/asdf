@@ -152,12 +152,18 @@ class DeserializationException: AsdfException
 	}
 }
 
-/// JSON serialization function
+/// JSON serialization function.
 string serializeToJson(V)(auto ref V value)
+{
+	return serializeToJsonPretty!""(value);
+}
+
+/// JSON serialization function with pretty formatting.
+string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
 {
 	import std.array;
 	auto app = appender!(char[]);
-	auto ser = jsonSerializer(&app.put!(const(char)[]));
+	auto ser = jsonSerializer!""(&app.put!(const(char)[]));
 	ser.serializeValue(value);
 	ser.flush;
 	return cast(string) app.data;
@@ -459,9 +465,30 @@ unittest
 }
 
 /// JSON serialization back-end
-struct JsonSerializer
+struct JsonSerializer(string sep)
 {
 	import asdf.jsonbuffer;
+
+	static if(sep.length)
+	{
+		private size_t deep;
+
+		private void putSpace()
+		{
+			for(auto k = deep; k; k--)
+			{
+				static if(sep.length == 1)
+				{
+					sink.put(sep[0]);
+				}
+				else
+				{
+					sink.put!sep;
+				}
+			}
+		}
+	}
+
 
 	/// JSON string buffer
 	JsonBuffer sink;
@@ -489,19 +516,42 @@ struct JsonSerializer
 	private void incState()
 	{
 		if(state++)
-			sink.put(',');
+		{
+			static if(sep.length)
+			{
+				sink.put!",\n";
+			}
+			else
+			{
+				sink.put(',');
+			}
+		}
 	}
 
 	/// Serialization primitives
 	uint objectBegin()
 	{
-		sink.put('{');
+		static if(sep.length)
+		{
+			deep++;
+			sink.put!"{\n";
+		}
+		else
+		{
+			sink.put('{');
+		}
 		return popState;
 	}
 
 	///ditto
 	void objectEnd(uint state)
 	{
+		static if(sep.length)
+		{
+			deep--;
+			sink.put('\n');
+			putSpace;
+		}
 		sink.put('}');
 		pushState(state);
 	}
@@ -509,13 +559,27 @@ struct JsonSerializer
 	///ditto
 	uint arrayBegin()
 	{
-		sink.put('[');
+		static if(sep.length)
+		{
+			deep++;
+			sink.put!"[\n";
+		}
+		else
+		{
+			sink.put('[');
+		}
 		return popState;
 	}
 
 	///ditto
 	void arrayEnd(uint state)
 	{
+		static if(sep.length)
+		{
+			deep--;
+			sink.put('\n');
+			putSpace;
+		}
 		sink.put(']');
 		pushState(state);
 	}
@@ -524,18 +588,40 @@ struct JsonSerializer
 	void putEscapedKey(in char[] key)
 	{
 		incState;
+		static if(sep.length)
+		{
+			putSpace;
+		}
 		sink.put('\"');
 		sink.putSmallEscaped(key);
-		sink.put!"\":";
+		static if(sep.length)
+		{
+			sink.put!"\": ";
+		}
+		else
+		{
+			sink.put!"\":";
+		}
 	}
 
 	///ditto
 	void putKey(in char[] key)
 	{
 		incState;
+		static if(sep.length)
+		{
+			putSpace;
+		}
 		sink.put('\"');
 		sink.put(key);
-		sink.put!"\":";
+		static if(sep.length)
+		{
+			sink.put!"\": ";
+		}
+		else
+		{
+			sink.put!"\":";
+		}
 	}
 
 	///ditto
@@ -547,7 +633,7 @@ struct JsonSerializer
 	///ditto
 	void putValue(typeof(null))
 	{
-		sink.put("null");
+		sink.put!"null";
 	}
 
 	///ditto
@@ -578,6 +664,10 @@ struct JsonSerializer
 	void elemBegin()
 	{
 		incState;
+		static if(sep.length)
+		{
+			putSpace;
+		}
 	}
 
 	///ditto
@@ -587,10 +677,13 @@ struct JsonSerializer
 	}
 }
 
-/// Create JSON serialization back-end
-auto jsonSerializer(scope void delegate(const(char)[]) sink)
+/++
+Creates JSON serialization back-end.
+Use `sep` equal to `"\t"` or `"    "` for pretty formatting.
++/
+auto jsonSerializer(string sep = "")(scope void delegate(const(char)[]) sink)
 {
-	return JsonSerializer(sink);
+	return JsonSerializer!sep(sink);
 }
 
 ///
@@ -621,6 +714,49 @@ unittest
 	ser.flush;
 
 	assert(app.data == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
+}
+
+unittest
+{
+	import std.array;
+	import std.bigint;
+
+	auto app = appender!string;
+	auto ser = jsonSerializer!"\t"(&app.put!(const(char)[]));
+	auto state0 = ser.objectBegin;
+
+		ser.putEscapedKey("null");
+		ser.putValue(null);
+	
+		ser.putEscapedKey("array");
+		auto state1 = ser.arrayBegin();
+			ser.elemBegin; ser.putValue(null);
+			ser.elemBegin; ser.putValue(123);
+			ser.elemBegin; ser.putNumberValue(12300000.123, singleSpec("%.10e"));
+			ser.elemBegin; ser.putValue("\t");
+			ser.elemBegin; ser.putValue("\r");
+			ser.elemBegin; ser.putValue("\n");
+			ser.elemBegin; ser.putNumberValue(BigInt("1234567890"));
+		ser.arrayEnd(state1);
+	
+	ser.objectEnd(state0);
+	ser.flush;
+
+	import std.stdio;
+
+	assert(app.data == 
+`{
+	"null": null,
+	"array": [
+		null,
+		123,
+		1.2300000123e+07,
+		"\t",
+		"\r",
+		"\n",
+		1234567890
+	]
+}`);
 }
 
 /// ASDF serialization back-end
@@ -1570,4 +1706,3 @@ private template aliasSeqOf(alias range)
         }
     }
 }
-
