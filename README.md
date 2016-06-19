@@ -31,7 +31,7 @@ JSON Objects or to custom data types.
 #### Simple Example
 
 1. define your struct
-2. call `serializeToJson`
+2. call `serializeToJson` ( or `serializeToJsonPretty` for pretty printing! )
 3. profit! 
 
 ```D
