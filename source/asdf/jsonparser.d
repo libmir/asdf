@@ -238,6 +238,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 	Chunks chunks;
 	OutputArray oa;
 
+	/++
+	Update the front array ``r` if it is empty.
+	Return `false` on unexpected end of input.
+	+/
 	bool setFrontRange()
 	{
 		if(r.length == 0)
