@@ -213,7 +213,7 @@ Returns:
 +/
 auto parseJsonByLine(
 	Flag!"spaces" spaces = Yes.spaces, size_t initLength = 32)
-	(ref in const(char)[] text)
+	(in const(char)[] text)
 {
 	import std.range: only;
 	return (cast(const(ubyte[]))text).only.parseJsonByLine!spaces(initLength);
