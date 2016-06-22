@@ -582,7 +582,7 @@ struct Asdf
 		import std.traits: isNumeric;
 		import std.conv: to, ConvException;
 		import std.format: format;
-		import std.math: isNumeric, lround, trunc;
+		import std.math: lround, trunc;
 		import asdf.serialization;
 		auto k = kind;
 		with(Kind) switch(kind)
