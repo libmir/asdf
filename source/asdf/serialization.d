@@ -158,17 +158,6 @@ string serializeToJson(V)(auto ref V value)
 	return serializeToJsonPretty!""(value);
 }
 
-/// JSON serialization function with pretty formatting.
-string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
-{
-	import std.array;
-	auto app = appender!(char[]);
-	auto ser = jsonSerializer!""(&app.put!(const(char)[]));
-	ser.serializeValue(value);
-	ser.flush;
-	return cast(string) app.data;
-}
-
 ///
 unittest
 {
@@ -179,6 +168,17 @@ unittest
 	}
 
 	assert(serializeToJson(S("str", 4)) == `{"foo":"str","bar":4}`);
+}
+
+/// JSON serialization function with pretty formatting.
+string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
+{
+	import std.array;
+	auto app = appender!(char[]);
+	auto ser = jsonSerializer!""(&app.put!(const(char)[]));
+	ser.serializeValue(value);
+	ser.flush;
+	return cast(string) app.data;
 }
 
 /// ASDF serialization function
