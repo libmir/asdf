@@ -426,7 +426,7 @@ unittest
 }
 
 /++
-Allows to use flexible deserialization rules the same way like `Asdf.opCast` do.
+Allows to use flexible deserialization rules the same way like `Asdf.opCast` does.
 
 See_also: $(DUBREF asdf, .Asdf.opCast).
 +/
