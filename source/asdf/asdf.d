@@ -578,15 +578,17 @@ struct Asdf
 	+/
 	T opCast(T)()
 	{
-		import std.traits: isFloatingPoint;
+		import std.datetime: SysTime, DateTime, usecs, UTC;
+		import std.traits: isNumeric;
 		import std.conv: to, ConvException;
 		import std.format: format;
+		import std.math: lround, trunc;
 		import asdf.serialization;
 		auto k = kind;
 		with(Kind) switch(kind)
 		{
 			case null_ :
-				static if (isFloatingPoint!T
+				static if (isNumeric!T
 						|| is(T == interface)
 						|| is(T == class)
 						|| is(T == E[], E)
@@ -605,7 +607,17 @@ struct Asdf
 			case number:
 				scope str = cast(const(char)[]) data[2 .. $];
 				static if(is(T == bool))
-					return str != "0";
+					return str.to!real != 0;
+				else
+				static if(is(T == SysTime) || is(T == DateTime))
+				{
+					auto unixTime = str.to!real;
+					auto secsR = unixTime.trunc;
+					auto rem = unixTime - secsR;
+					auto st = SysTime.fromUnixTime(lround(secsR), UTC());
+					st.fracSecs = usecs(lround(rem * 1_000_000));
+					return st.to!T;
+				}
 				else
 				static if(__traits(compiles, str.to!T))
 					return str.to!T;
@@ -727,5 +739,16 @@ struct Asdf
 		import std.bigint;
 		import asdf.serialization;
 		assert(cast(int[]) serializeToAsdf([100, 20]) == [100, 20]);
+	}
+
+	/// UNIX Time
+	unittest
+	{
+		import std.datetime;
+		import asdf.serialization;
+
+		auto num =  serializeToAsdf(0.123456789); // rounding up to usecs
+		assert(cast(DateTime) num == DateTime(1970, 1, 1));
+		assert(cast(SysTime) num == SysTime(DateTime(1970, 1, 1), usecs(123457), UTC())); // UTC time zone is used.
 	}
 }
