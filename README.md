@@ -77,6 +77,8 @@ See ASDF [API](http://docs.asdf.dlang.io) and [Specification](https://github.com
 | `@serializedAs!string` | call to!string |
 | `@serializationTransformIn!fin` | call function `fin` to transform the data |
 | `@serializationTransformOut!fout`  | run function `fout` on serialization, different notation |
+| `@serializationFlexible`  | be flexible on the datatype on reading, e.g. read long's that are wrapped as strings |
+
 
 please also look into the Docs or Unittest for concrete examples!
 
@@ -248,3 +250,16 @@ struct S
 }
 assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
 ```
+
+##### serializationFlexible
+```D
+static struct S
+{
+	@serializationFlexible uint a;
+}
+
+assert(`{"a":"100"}`.deserialize!S.a == 100);
+assert(`{"a":true}`.deserialize!S.a == 1);
+assert(`{"a":null}`.deserialize!S.a == 0);
+ ```
+
