@@ -426,6 +426,29 @@ unittest
 }
 
 /++
+Allows to use flexible deserialization rules the same way like `Asdf.opCast` do.
+
+See_also: $(DUBREF asdf, .Asdf.opCast).
++/
+enum Serialization serializationFlexible = serialization("flexible");
+
+///
+unittest
+{
+	import std.uuid;
+
+	static struct S
+	{
+		@serializationFlexible
+		uint a;
+	}
+
+	assert(`{"a":"100"}`.deserialize!S.a == 100);
+	assert(`{"a":true}`.deserialize!S.a == 1);
+	assert(`{"a":null}`.deserialize!S.a == 0);
+}
+
+/++
 Attributes for in and out transformations.
 Return type of in transformation must be implicitly convertable to the type of the field.
 Return type of out transformation may be differ from the type of the field.
@@ -1347,6 +1370,7 @@ unittest
 void deserializeValue(V)(Asdf data, ref V value)
 	if(isAggregateType!V && !is(V : BigInt))
 {
+	static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
 	static if(__traits(compiles, value = V.deserialize(data)))
 	{
 		value = V.deserialize(data);
@@ -1384,6 +1408,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 						__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
+						enum F = isFlexible(V.stringof, member, udas);
 						static if(!ignoreIn(udas))
 						{
 							enum keys = keysIn(V.stringof, member, udas);
@@ -1396,8 +1421,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
-								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 						
 					Proxy proxy;
 					Fun(elem.value, proxy);
@@ -1407,8 +1432,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							else
 							static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
-								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
-								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
+								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
 					Fun(elem.value, __traits(getMember, value, member));
 
@@ -1417,8 +1442,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 							{
 					Type val;
 
-								enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, val));
-								alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, val));
+								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
 					Fun(elem.value, val);
 					__traits(getMember, value, member) = val;
@@ -1447,6 +1472,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
+				enum F = isFlexible(V.stringof, member, udas);
 				static if(!ignoreIn(udas))
 				{
 					enum target = [getUDAs!(__traits(getMember, value, member), SerializationGroup)];
@@ -1462,8 +1488,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 								static if(hasSerializedAs!(__traits(getMember, value, member)))
 								{
 									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
-									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, proxy));
-									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, proxy));
+									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 							
 									Proxy proxy;
 									Fun(d, proxy);
@@ -1472,8 +1498,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 								else
 								static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 								{
-									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
-									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
+									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
 									Fun(d, __traits(getMember, value, member));
 
@@ -1482,8 +1508,8 @@ void deserializeValue(V)(Asdf data, ref V value)
 								{
 									Type val;
 
-									enum F = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, val));
-									alias Fun = Select!(F, .deserializeScopedString, .deserializeValue);
+									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, val));
+									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
 									Fun(elem.value, val);
 									__traits(getMember, value, member) = val;
@@ -1594,6 +1620,19 @@ private template getTransformOut(alias value)
 	private alias _list = TransformOutList!value;
 	static assert(_list.length <= 1, `Only single output transformation is allowed`);
 	alias getTransformOut = _list[0];
+}
+
+private bool isFlexible(string type, string member, Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind, find, startsWith, count;
+	alias pred = unaryFun!(a => a.args[0] == "flexible");
+	auto c = attrs.count!pred;
+	if(c == 0)
+		return false;
+	if(c == 1)
+		return true;
+	throw new Exception(type ~ "." ~ member ~
+		` : Only single declaration of "flexible" serialization attribute is allowed`);
 }
 
 private bool isScoped(string type, string member, Serialization[] attrs)
