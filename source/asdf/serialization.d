@@ -118,6 +118,28 @@ unittest
 	assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
 }
 
+/// A user may define setter and/or getter properties.
+unittest
+{
+	static struct S
+	{
+		@serializationIgnore string str;
+
+		string a() @property
+		{
+			return str;
+		}
+
+		void b(int s) @property
+		{
+			str = s.to!string;
+		}
+	}
+
+	assert(S("str").serializeToJson == `{"a":"str"}`);
+	assert(`{"b":123}`.deserialize!S.str == "123");
+}
+
 import std.traits;
 import std.meta;
 import std.range.primitives;
@@ -1071,7 +1093,11 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		foreach(member; __traits(allMembers, V))
 		{
 			static if(
-				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member))
+				(__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member))
+				||
+					__traits(compiles, { auto _val = __traits(getMember, value, member); })
+					&&
+					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property)
 				&&
 				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
 			{
@@ -1402,10 +1428,21 @@ void deserializeValue(V)(Asdf data, ref V value)
 			{
 				foreach(member; __traits(allMembers, V))
 				{
+					enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
 					static if(
-						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+						(
+							proper
+							||
+							__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
+							&&
+							isCallable!(__traits(getMember, value, member))
+							&&
+							functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
+							&&
+							Parameters!(__traits(getMember, value, member)).length == 1
+						)
 						&&
-						__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
+						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 						enum F = isFlexible(V.stringof, member, udas);
@@ -1417,7 +1454,14 @@ void deserializeValue(V)(Asdf data, ref V value)
 				case key:
 
 							}
-							alias Type = typeof(__traits(getMember, value, member));
+							static if(!proper)
+							{
+								alias Type = Parameters!(__traits(getMember, value, member));
+							}
+							else
+							{
+								alias Type = typeof(__traits(getMember, value, member));
+							}
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
@@ -1430,7 +1474,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 							}
 							else
-							static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+							static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -1452,7 +1496,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 							static if(hasTransformIn!(__traits(getMember, value, member)))
 							{
-					alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
+								alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
 					__traits(getMember, value, member) = f(__traits(getMember, value, member));
 							}
 
@@ -1466,10 +1510,21 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 		foreach(member; __traits(allMembers, V))
 		{
+			enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
 			static if(
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage
+				(
+					proper
+					||
+					__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
+					&&
+					isCallable!(__traits(getMember, value, member))
+					&&
+					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
+					&&
+					Parameters!(__traits(getMember, value, member)).length == 1
+				)
 				&&
-				__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member)))
+				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				enum F = isFlexible(V.stringof, member, udas);
@@ -1484,7 +1539,14 @@ void deserializeValue(V)(Asdf data, ref V value)
 							auto d = data[ser];
 							if(d.data.length)
 							{
-								alias Type = typeof(__traits(getMember, value, member));
+								static if(!proper)
+								{
+									alias Type = Parameters!(__traits(getMember, value, member));
+								}
+								else
+								{
+									alias Type = typeof(__traits(getMember, value, member));
+								}
 								static if(hasSerializedAs!(__traits(getMember, value, member)))
 								{
 									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
@@ -1496,7 +1558,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 									__traits(getMember, value, member) = proxy.to!Type;
 								}
 								else
-								static if(__traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+								static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 								{
 									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
 									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -1533,7 +1595,6 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 	}
 }
-
 
 private enum bool isSerializedAs(A) = is(A : serializedAs!T, T);
 private enum bool isSerializedAs(alias a) = false;
