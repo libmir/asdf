@@ -197,10 +197,17 @@ string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
 {
 	import std.array;
 	auto app = appender!(char[]);
-	auto ser = jsonSerializer!""(&app.put!(const(char)[]));
+	auto ser = jsonSerializer!sep(&app.put!(const(char)[]));
 	ser.serializeValue(value);
 	ser.flush;
 	return cast(string) app.data;
+}
+
+///
+unittest
+{
+    static struct S { int a; }
+    assert(S(4).serializeToJsonPretty == "{\n\t\"a\": 4\n}");
 }
 
 /// ASDF serialization function
