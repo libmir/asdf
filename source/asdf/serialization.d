@@ -477,6 +477,21 @@ unittest
 	assert(`{"a":null}`.deserialize!S.a == 0);
 }
 
+///
+unittest
+{
+	static struct Vector
+	{
+	 	@serializationFlexible int x;
+	 	@serializationFlexible int y;
+	}
+
+	auto json = `[{"x":"1","y":2},{"x":null, "y": null},{"x":1, "y":2}]`;
+	auto decoded = json.deserialize!(Vector[]);
+	import std.conv;
+	assert(decoded == [Vector(1, 2), Vector(0, 0), Vector(1, 2)], decoded.text);
+}
+
 /++
 Attributes for in and out transformations.
 Return type of in transformation must be implicitly convertable to the type of the field.
