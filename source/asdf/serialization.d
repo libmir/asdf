@@ -482,8 +482,8 @@ unittest
 {
 	static struct Vector
 	{
-	 	@serializationFlexible int x;
-	 	@serializationFlexible int y;
+		@serializationFlexible int x;
+		@serializationFlexible int y;
 	}
 
 	auto json = `[{"x":"1","y":2},{"x":null, "y": null},{"x":1, "y":2}]`;
