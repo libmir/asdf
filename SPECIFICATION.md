@@ -33,8 +33,8 @@ Following JSON encoded characters are decoded to an appropriate unicode characte
 \n
 \r
 \t
+\u-four-hex-digits
 ```
-`\u four-hex-digits` pattern is not supported.
 
 ### Array
 

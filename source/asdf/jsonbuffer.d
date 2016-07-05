@@ -54,6 +54,19 @@ package struct JsonBuffer
 		length = newLength;
 	}
 
+	void putUnicode(ubyte b)
+	{
+		buffer[length + 0] = 'u';
+		buffer[length + 1] = '0';
+		buffer[length + 2] = '0';
+		ubyte[2] spl;
+		spl[0] = b >> 4;
+		spl[1] = b & 0xF;
+		buffer[length + 3] = cast(ubyte)(spl[0] < 10 ? spl[0] + '0' : spl[0] - 10 + 'A');
+		buffer[length + 4] = cast(ubyte)(spl[1] < 10 ? spl[1] + '0' : spl[1] - 10 + 'A');
+		length += 5;
+	}
+
 	/+
 	Puts string
 	+/
@@ -82,7 +95,7 @@ package struct JsonBuffer
 
 			for(auto d = str.representation; d.length;)
 			{
-				if(length + 17 > buffer.length)
+				if(length + 21 > buffer.length)
 				{
 					flush;
 				}
@@ -136,18 +149,17 @@ package struct JsonBuffer
 
 				int eax = ecx + 1;
 				auto cflag = __builtin_ia32_pcmpestric128(str1, eax, str3, emap.length, 0x00);
-				ecx =        __builtin_ia32_pcmpestri128 (str1, eax, str3, emap.length, 0x00);
+				edx =        __builtin_ia32_pcmpestri128 (str1, eax, str3, emap.length, 0x00);
+				d = d[1 .. $];
+				buffer[length + 0] = '\\';
 				if(cflag)
 				{
-					d = d[1 .. $];
-					buffer[length + 0] = '\\';
-					buffer[length + 1] = emap[ecx];
+					buffer[length + 1] = emap[edx];
 					length += 2;
 					continue;
 				}
-				import std.utf: UTFException;
-				import std.format: format;
-				throw new UTFException(format("unexpected char \\x%X", d[0]));
+				length += 1;
+				putUnicode(str1.array[ecx]);
 			}
 		}
 		else
@@ -158,43 +170,62 @@ package struct JsonBuffer
 				{
 					flush;
 				}
-				auto ptr = buffer.ptr + length;
 				foreach(size_t i, char e; chunk)
 				{
-					if(e < ' ')
+					switch(e)
 					{
-						ptr++[i] = '\\';
-						length++;
-						switch(e)
-						{
-							case '\b': ptr[i] = 'b'; continue;
-							case '\f': ptr[i] = 'f'; continue;
-							case '\n': ptr[i] = 'n'; continue;
-							case '\r': ptr[i] = 'r'; continue;
-							case '\t': ptr[i] = 't'; continue;
-							default:
-								import std.utf: UTFException;
-								import std.format: format;
-								throw new UTFException(format("unexpected char \\x%X", e));
-						}
+						case '\b':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = 'b';
+							length += 2;
+							continue;
+						case '\f':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = 'f';
+							length += 2;
+							continue;
+						case '\n':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = 'n';
+							length += 2;
+							continue;
+						case '\r':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = 'r';
+							length += 2;
+							continue;
+						case '\t':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = 't';
+							length += 2;
+							continue;
+						case '\\':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = '\\';
+							length += 2;
+							continue;
+						case '\"':
+							buffer[length + 0] = '\\';
+							buffer[length + 1] = '\"';
+							length += 2;
+							continue;
+						case '\0': .. case '\u0007':
+						case '\u000e': .. case '\u001f':
+						case '\u000b':
+						case '\u00ff':
+							buffer[length + 0] = '\\';
+							length++;
+							putUnicode(e);
+							if(chunk.length * 2 + length + 16 > buffer.length)
+							{
+								flush;
+							}
+							continue;
+						default:
+							buffer[length] = e;
+							length++;
 					}
-					if(e == '\\')
-					{
-						ptr++[i] = '\\';
-						length++;
-						ptr[i] = '\\';
-						continue;
-					}
-					if(e == '\"')
-					{
-						ptr++[i] = '\\';
-						length++;
-						ptr[i] = '\"';
-						continue;
-					}
-					ptr[i] = e;
 				}
-				length += chunk.length;
 			}
 		}
 	}
