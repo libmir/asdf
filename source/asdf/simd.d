@@ -64,4 +64,22 @@ if(is(typeof(llvmVecType!V)))
 	alias inlineIR!(ir, void, V, T*) storeUnaligned;
 }
 
-public import ldc.simd: loadUnaligned;
+template loadUnaligned(V)
+if(is(typeof(llvmVecType!V)))
+{
+	alias BaseType!V T;
+	enum llvmT = llvmType!T;
+	enum llvmV = llvmVecType!V;
+	version (LDC_LLVM_306)
+		enum ir = `
+			%p = bitcast `~llvmT~`* %0 to `~llvmV~`*
+			%r = load `~llvmV~`* %p, align 1
+			ret `~llvmV~` %r`;
+	else
+		enum ir = `
+			%p = bitcast `~llvmT~`* %0 to `~llvmV~`*
+			%r = load `~llvmV~`, `~llvmV~`* %p, align 1
+			ret `~llvmV~` %r`;
+
+	alias inlineIR!(ir, V, T*) loadUnaligned;
+}
