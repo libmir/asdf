@@ -471,7 +471,20 @@ unittest
 }
 
 /++
-Allows serilalize / deserialize fields like arrays.
+Allows serialize / deserialize fields like arrays.
+
+A range or a container should be iterable for serialization.
+Following code should compile:
+------
+foreach(ref value; yourRangeOrContainer)
+{
+	...
+}
+------
+
+`put(value)` method is used for deserialization. 
+
+See_also: $(MREF serializationIgnoreOut), $(MREF serializationIgnoreIn)
 +/
 enum Serialization serializationLikeArray = serialization("like-array");
 
@@ -501,9 +514,25 @@ unittest
 }
 
 /++
-Allows serilalize / deserialize fields like objects.
+Allows serialize / deserialize fields like objects.
 
-See_also: $(DUBREF asdf, .Asdf.opCast).
+Object should have `opApply` method to allow serialization.
+Following code should compile:
+------
+foreach(key, value; yourObject)
+{
+	...
+}
+------
+Object should have only one `opApply` method with 2 argument to allow automatic value type deduction.
+
+`opIndexAssign` or `opIndex` is used for deserialization to support required syntax:
+-----
+yourObject["key"] = value;
+-----
+Multiple value types is supported for deserialization.
+
+See_also: $(MREF serializationIgnoreOut), $(MREF serializationIgnoreIn), $(DUBREF asdf, .Asdf.opCast)
 +/
 enum Serialization serializationLikeObject = serialization("like-object");
 
