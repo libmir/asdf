@@ -572,7 +572,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 't' : oa.put1('\t'); continue;
 						case 'u' :
 							c = readUnicode();
-							if(readUnicode() > 0)
+							if(c > 0)
 								continue;
 							goto default;
 						default  :
