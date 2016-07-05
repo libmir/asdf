@@ -401,6 +401,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 		}
 	}
 	
+	/++
+	Encodes `XXXX` to the UTF-8 buffer`, where `XXXX` expected to be hexadecimal character.
+	Returns: `1` on success.
+	+/
 	private int readUnicode()
 	{
 		char[4] buf;

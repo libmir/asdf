@@ -54,7 +54,10 @@ package struct JsonBuffer
 		length = newLength;
 	}
 
-	void putUnicode(ubyte b)
+	/++
+	Decodes byte `b` to the form `u00XX`, where `XX` is 2 hexadecimal characters.
+	+/
+	private void putUnicode(ubyte b)
 	{
 		buffer[length + 0] = 'u';
 		buffer[length + 1] = '0';
