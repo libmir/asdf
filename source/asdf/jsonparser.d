@@ -400,6 +400,42 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 			default : return -c;
 		}
 	}
+	
+	/++
+	Encodes `XXXX` to the UTF-8 buffer`, where `XXXX` expected to be hexadecimal character.
+	Returns: `1` on success.
+	+/
+	private int readUnicode()
+	{
+		char[4] buf;
+		uint data = '\0';
+		foreach(i; 0..4)
+		{
+			int c = pop;
+			switch(c)
+			{
+				case '0': .. case '9':
+					c = c - '0';
+					break;
+				case 'a': .. case 'f':
+					c = c - 'a' + 10;
+					break;
+				case 'A': .. case 'F':
+					c = c - 'A' + 10;
+					break;
+				default: return -c;
+			}
+			data <<= 4;
+			data ^= c;
+		}
+		import std.utf: encode;
+		foreach(ch; buf[0 .. buf.encode(data)])
+		{
+			oa.put1(ch);
+		}
+		return 1;
+	}
+
 
 	// reads a string
 	sizediff_t readStringImpl(bool key = false)()
@@ -534,6 +570,11 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 'n' : oa.put1('\n'); continue;
 						case 'r' : oa.put1('\r'); continue;
 						case 't' : oa.put1('\t'); continue;
+						case 'u' :
+							c = readUnicode();
+							if(c > 0)
+								continue;
+							goto default;
 						default  :
 					}
 				}
@@ -576,6 +617,11 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 'n' : c = '\n'; break;
 						case 'r' : c = '\r'; break;
 						case 't' : c = '\t'; break;
+						case 'u' :
+							c = readUnicode();
+							if(c > 0)
+								continue;
+							return -c;
 						default: return -c;
 					}
 				}

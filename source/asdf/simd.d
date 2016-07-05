@@ -70,7 +70,7 @@ if(is(typeof(llvmVecType!V)))
 	alias BaseType!V T;
 	enum llvmT = llvmType!T;
 	enum llvmV = llvmVecType!V;
-	version (LDC_LLVM_PRE307)
+	version (LDC_LLVM_306)
 		enum ir = `
 			%p = bitcast `~llvmT~`* %0 to `~llvmV~`*
 			%r = load `~llvmV~`* %p, align 1

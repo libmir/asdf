@@ -124,6 +124,15 @@ struct Asdf
 		assert(Asdf("string") != "String");
 	}
 
+	// \uXXXX character support
+	unittest
+	{
+		import std.conv: to;
+		import asdf.jsonparser;
+		assert(Asdf("begin\u000bend").to!string == `"begin\u000Bend"`);
+		assert("begin\u000bend" == cast(string) `"begin\u000Bend"`.parseJson, cast(string) `"begin\u000Bend"`.parseJson);
+	}
+
 	/// Sets deleted bit on
 	void remove()
 	{
