@@ -152,7 +152,7 @@ package struct JsonBuffer
 
 				int eax = ecx + 1;
 				auto cflag = __builtin_ia32_pcmpestric128(str1, eax, str3, emap.length, 0x00);
-				edx =        __builtin_ia32_pcmpestri128 (str1, eax, str3, emap.length, 0x00);
+				auto edx =        __builtin_ia32_pcmpestri128 (str1, eax, str3, emap.length, 0x00);
 				d = d[1 .. $];
 				buffer[length + 0] = '\\';
 				if(cflag)
