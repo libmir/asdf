@@ -493,6 +493,106 @@ unittest
 }
 
 /++
+Allows serialize / deserialize fields like arrays.
+
+A range or a container should be iterable for serialization.
+Following code should compile:
+------
+foreach(ref value; yourRangeOrContainer)
+{
+	...
+}
+------
+
+`put(value)` method is used for deserialization. 
+
+See_also: $(MREF serializationIgnoreOut), $(MREF serializationIgnoreIn)
++/
+enum Serialization serializationLikeArray = serialization("like-array");
+
+///
+unittest
+{
+	import std.range;
+	import std.uuid;
+
+	static struct S
+	{
+		private int count;
+		@serializationLikeArray
+		auto numbers() @property // uses `foreach`
+		{
+			return iota(count);
+		}
+
+		@serializationLikeArray
+		@serializedAs!string // input element type of
+		@serializationIgnoreOut
+		Appender!(string[]) strings; //`put` method is used
+	}
+
+	assert(S(5).serializeToJson == `{"numbers":[0,1,2,3,4]}`);
+	assert(`{"strings":["a","b"]}`.deserialize!S.strings.data == ["a","b"]);
+}
+
+/++
+Allows serialize / deserialize fields like objects.
+
+Object should have `opApply` method to allow serialization.
+Following code should compile:
+------
+foreach(key, value; yourObject)
+{
+	...
+}
+------
+Object should have only one `opApply` method with 2 argument to allow automatic value type deduction.
+
+`opIndexAssign` or `opIndex` is used for deserialization to support required syntax:
+-----
+yourObject["key"] = value;
+-----
+Multiple value types is supported for deserialization.
+
+See_also: $(MREF serializationIgnoreOut), $(MREF serializationIgnoreIn), $(DUBREF asdf, .Asdf.opCast)
++/
+enum Serialization serializationLikeObject = serialization("like-object");
+
+///
+unittest
+{
+	static struct M
+	{
+		private int sum;
+
+		// opApply is used for serialization
+		int opApply(int delegate(in char[] key, int val) dg)
+		{
+			if(auto r = dg("a", 1)) return r;
+			if(auto r = dg("b", 2)) return r;
+			if(auto r = dg("c", 3)) return r;
+			return 0;
+		}
+
+		// opIndexAssign for deserialization
+		void opIndexAssign(int val, string key)
+		{
+			sum += val;
+		}
+	}
+
+	static struct S
+	{
+		@serializationLikeObject
+		@serializedAs!int
+		M obj;
+	}
+
+	assert(S.init.serializeToJson == `{"obj":{"a":1,"b":2,"c":3}}`);
+	assert(`{"obj":{"a":1,"b":2,"c":9}}`.deserialize!S.obj.sum == 12);
+}
+
+/++
 Attributes for in and out transformations.
 Return type of in transformation must be implicitly convertable to the type of the field.
 Return type of out transformation may be differ from the type of the field.
@@ -519,7 +619,7 @@ unittest
 		return i + 2;
 	}
 
-	struct S
+	static struct S
 	{
 		@serializationTransformIn!fin
 		@serializationTransformOut!`"str".repeat.take(a).joiner("_").to!string`
@@ -1138,6 +1238,62 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 
 					enum key = keyOut(S.stringof, member, udas);
 					serializer.putEscapedKey(key);
+
+					static if(isLikeArray(V.stringof, member, udas))
+					{
+						alias V = typeof(val);
+						static if(is(V == interface) || is(V == class) || is(V : E[], E))
+						{
+							if(val is null)
+							{
+								serializer.putValue(null);
+								continue;
+							}
+						}
+						auto valState = serializer.arrayBegin();
+						foreach (ref elem; val)
+						{
+							serializer.elemBegin;
+							static if(hasSerializedAs!(__traits(getMember, value, member)))
+							{
+								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								serializer.serializeValue(elem.to!Proxy);
+							}
+							else
+							{
+								serializer.serializeValue(elem);
+							}
+						}
+						serializer.arrayEnd(valState);
+					}
+					else
+					static if(isLikeObject(V.stringof, member, udas))
+					{
+						static if(is(V == interface) || is(V == class) || is(V : E[T], E, T))
+						{
+							if(val is null)
+							{
+								serializer.putValue(null);
+								continue;
+							}
+						}
+						auto valState = serializer.objectBegin();
+						foreach (key, elem; val)
+						{
+							serializer.putKey(key);
+							static if(hasSerializedAs!(__traits(getMember, value, member)))
+							{
+								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								serializer.serializeValue(elem.to!Proxy);
+							}
+							else
+							{
+								serializer.serializeValue(elem);
+							}
+						}
+						serializer.objectEnd(valState);
+					}
+					else
 					static if(hasSerializedAs!(__traits(getMember, value, member)))
 					{
 						alias Proxy = getSerializedAs!(__traits(getMember, value, member));
@@ -1484,6 +1640,34 @@ void deserializeValue(V)(Asdf data, ref V value)
 							{
 								alias Type = typeof(__traits(getMember, value, member));
 							}
+							static if(isLikeArray(V.stringof, member, udas))
+							{
+								static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+								foreach(v; elem.value.byElement)
+								{
+									Proxy proxy;
+									Fun(v, proxy);
+									__traits(getMember, value, member).put(proxy);
+								}
+							}
+							else
+							static if(isLikeObject(V.stringof, member, udas))
+							{
+								static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+								foreach(v; elem.value.byKeyValue)
+								{
+									Proxy proxy;
+									Fun(v.value, proxy);
+									__traits(getMember, value, member)[elem.key.idup] = proxy;
+								}
+							}
+							else
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
@@ -1569,6 +1753,34 @@ void deserializeValue(V)(Asdf data, ref V value)
 								{
 									alias Type = typeof(__traits(getMember, value, member));
 								}
+								static if(isLikeArray(V.stringof, member, udas))
+								{
+									static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+									foreach(v; elem.value.byElement)
+									{
+										Proxy proxy;
+										Fun(v, proxy);
+										__traits(getMember, value, member).put(proxy);
+									}
+								}
+								else
+								static if(isLikeObject(V.stringof, member, udas))
+								{
+									static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
+									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+									foreach(v; elem.value.byKeyValue)
+									{
+										Proxy proxy;
+										Fun(v.value, proxy);
+										__traits(getMember, value, member)[elem.key.idup] = proxy;
+									}
+								}
+								else
 								static if(hasSerializedAs!(__traits(getMember, value, member)))
 								{
 									alias Proxy = getSerializedAs!(__traits(getMember, value, member));
@@ -1718,6 +1930,33 @@ private bool isFlexible(string type, string member, Serialization[] attrs)
 		` : Only single declaration of "flexible" serialization attribute is allowed`);
 }
 
+private bool isLikeArray(string type, string member, Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind, find, startsWith, count;
+	alias pred = unaryFun!(a => a.args[0] == "like-array");
+	auto c = attrs.count!pred;
+	if(c == 0)
+		return false;
+	if(c == 1)
+		return true;
+	throw new Exception(type ~ "." ~ member ~
+		` : Only single declaration of "like-array" serialization attribute is allowed`);
+}
+
+private bool isLikeObject(string type, string member, Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind, find, startsWith, count;
+	alias pred = unaryFun!(a => a.args[0] == "like-object");
+	auto c = attrs.count!pred;
+	if(c == 0)
+		return false;
+	if(c == 1)
+		return true;
+	throw new Exception(type ~ "." ~ member ~
+		` : Only single declaration of "like-object" serialization attribute is allowed`);
+}
+
+
 private bool isScoped(string type, string member, Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind, find, startsWith, count;
@@ -1796,35 +2035,35 @@ private bool privateOrPackage(string protection)
  */
 private template aliasSeqOf(alias range)
 {
-    import std.traits : isArray, isNarrowString;
+	import std.traits : isArray, isNarrowString;
 
-    alias ArrT = typeof(range);
-    static if (isArray!ArrT && !isNarrowString!ArrT)
-    {
-        static if (range.length == 0)
-        {
-            alias aliasSeqOf = AliasSeq!();
-        }
-        else static if (range.length == 1)
-        {
-            alias aliasSeqOf = AliasSeq!(range[0]);
-        }
-        else
-        {
-            alias aliasSeqOf = AliasSeq!(aliasSeqOf!(range[0 .. $/2]), aliasSeqOf!(range[$/2 .. $]));
-        }
-    }
-    else
-    {
-        import std.range.primitives : isInputRange;
-        static if (isInputRange!ArrT)
-        {
-            import std.array : array;
-            alias aliasSeqOf = aliasSeqOf!(array(range));
-        }
-        else
-        {
-            static assert(false, "Cannot transform range of type " ~ ArrT.stringof ~ " into a AliasSeq.");
-        }
-    }
+	alias ArrT = typeof(range);
+	static if (isArray!ArrT && !isNarrowString!ArrT)
+	{
+		static if (range.length == 0)
+		{
+			alias aliasSeqOf = AliasSeq!();
+		}
+		else static if (range.length == 1)
+		{
+			alias aliasSeqOf = AliasSeq!(range[0]);
+		}
+		else
+		{
+			alias aliasSeqOf = AliasSeq!(aliasSeqOf!(range[0 .. $/2]), aliasSeqOf!(range[$/2 .. $]));
+		}
+	}
+	else
+	{
+		import std.range.primitives : isInputRange;
+		static if (isInputRange!ArrT)
+		{
+			import std.array : array;
+			alias aliasSeqOf = aliasSeqOf!(array(range));
+		}
+		else
+		{
+			static assert(false, "Cannot transform range of type " ~ ArrT.stringof ~ " into a AliasSeq.");
+		}
+	}
 }
