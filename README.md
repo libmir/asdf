@@ -60,7 +60,7 @@ See ASDF [API](http://docs.asdf.dlang.io) and [Specification](https://github.com
 | uda | function |
 | ------------- |:-------------:|
 | `@serializationKeys("bar_common", "bar")` | tries to read the data from either property. saves it to the first one |
-| `@serializationKeysIn("a", "b")` | tries to read the data from `b`, then `b`. last one occuring in the json wins |
+| `@serializationKeysIn("a", "b")` | tries to read the data from `a`, then `b`. last one occuring in the json wins |
 | `@serializationKeyOut("a")` | writes it to `a` |
 | `@serializationMultiKeysIn(["a", "b", "c"])`  | tries to get the data from a sub object. this has not optimal performance yet if you are using more than 1 serializationMultiKeysIn in an object |
 | `@serializationIgnore` | ignore this property completely |
