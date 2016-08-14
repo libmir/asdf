@@ -250,7 +250,7 @@ struct Asdf
 	/++
 	`==` operator overloads for `null`
 	+/
-	bool opEquals(in Asdf rhs) const
+	bool opEquals(in Asdf rhs) const @safe pure nothrow @nogc
 	{
 		return data == rhs.data;
 	}

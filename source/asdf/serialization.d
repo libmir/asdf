@@ -213,7 +213,6 @@ unittest
 /// ASDF serialization function
 Asdf serializeToAsdf(V)(auto ref V value, size_t initialLength = 32)
 {
-	import std.array;
 	auto ser = asdfSerializer(initialLength);
 	ser.serializeValue(value);
 	ser.flush;
