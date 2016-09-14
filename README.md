@@ -56,8 +56,7 @@ See ASDF [API](http://docs.asdf.dlang.io) and [Specification](https://github.com
 
 #### Fast setup with the dub package manager
 
-[![Dub version](https://img.shields.io/dub/v/asdf.svg)](http://code.dlang.org/packages/mir)
-[![Dub downloads](https://img.shields.io/dub/dt/mir.svg)](http://code.dlang.org/packages/mir)
+[![Dub version](https://img.shields.io/dub/v/asdf.svg)](http://code.dlang.org/packages/asdf)
 
 [Dub](https://code.dlang.org/getting_started) is the D's package manager.
 You can create a new project with:
@@ -89,7 +88,7 @@ dub --build=release --compiler=ldmd2
 ```
 
 `ldmd2` is a shell on top of [LDC (LLVM D Compiler)](https://github.com/ldc-developers/ldc).
-`"dflags-ldc": ["-mcpu=native"]` allows LDC to optimize Mir for your CPU.
+`"dflags-ldc": ["-mcpu=native"]` allows LDC to optimize ASDF for your CPU.
 
 Instead of using `-mcpu=native`, you may specify additional instruction set for a target with `-mattr`.
 For example, `-mattr=+sse4.2`. ASDF has specialized code for
