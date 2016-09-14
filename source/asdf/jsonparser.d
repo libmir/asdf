@@ -16,16 +16,25 @@ T4=$(TR $(TDNW $(LREF $1)) $(TD $2) $(TD $3) $(TD $4))
 module asdf.jsonparser;
 
 import std.range.primitives;	
+import std.typecons;
 import asdf.asdf;
 import asdf.outputarray;
-import std.typecons;
 
 
-version(SSE42)
+version(LDC)
 {
-	import core.simd;
-	import asdf.simd;
-	import ldc.gccbuiltins_x86;
+	static if (__traits(targetHasFeature, "sse4.2"))
+	{
+		import core.simd;
+		import asdf.simd;
+		import ldc.gccbuiltins_x86;
+		pragma(msg, "Info: SSE4.2 instructions are used for ASDF.");
+		version = SSE42;
+	}
+	else
+	{
+		pragma(msg, "Info: SSE4.2 instructions are not used for ASDF.");
+	}
 }
 
 /++

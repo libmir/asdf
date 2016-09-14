@@ -54,9 +54,53 @@ See ASDF [API](http://docs.asdf.dlang.io) and [Specification](https://github.com
  - Reading JSON line separated values and parsing them to ASDF - 300+ MB per second (SSD).
  - Writing ASDF range to JSON line separated values - 300+ MB per second (SSD).
 
- - 🚀 for extra speed powerups on X86 you can use `"subConfigurations": { "asdf": "native-sse42" }` in your `dub.json`. Watch it fly!
+#### Fast setup with the dub package manager
 
-#### current transformation functions
+[![Dub version](https://img.shields.io/dub/v/asdf.svg)](http://code.dlang.org/packages/mir)
+[![Dub downloads](https://img.shields.io/dub/dt/mir.svg)](http://code.dlang.org/packages/mir)
+
+[Dub](https://code.dlang.org/getting_started) is the D's package manager.
+You can create a new project with:
+
+```
+dub init <project-name>
+```
+
+Now you need to edit the `dub.json` add `asdf` as dependency and set its targetType to `executable`.
+
+```json
+{
+	...
+	"dependencies": {
+		"asdf": "~><current-version>"
+	},
+	"targetType": "executable",
+	"dflags-ldc": ["-mcpu=native"]
+}
+```
+
+Now you can create a main file in the `source` and run your code with 
+```
+dub
+```
+Flags `--build=release` and `--compiler=ldmd2` can be added for a performance boost:
+```
+dub --build=release --compiler=ldmd2
+```
+
+`ldmd2` is a shell on top of [LDC (LLVM D Compiler)](https://github.com/ldc-developers/ldc).
+`"dflags-ldc": ["-mcpu=native"]` allows LDC to optimize Mir for your CPU.
+
+Instead of using `-mcpu=native`, you may specify additional instruction set for a target with `-mattr`.
+For example, `-mattr=+sse4.2`. ASDF has specialized code for
+[SSE4.2](https://en.wikipedia.org/wiki/SSE4#SSE4.2 instruction set).
+
+#### Compatibility
+
+- LDC (LLVM D Compiler) >= `1.1.0-beta2` (recommended compiler).
+- DMD (reference D compiler) >= `2.072.1`.
+
+#### Main transformation functions
 
 | uda | function |
 | ------------- |:-------------:|

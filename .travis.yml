@@ -5,20 +5,20 @@ os:
 language: d
 d:
  - dmd-2.071.1
- - ldc-1.0.0
+ - ldc-1.1.0-beta2
 env:
  - ARCH="x86_64" CONF=""
- - ARCH="x86_64" CONF="--config=native-sse42"
+ - ARCH="x86_64" CONF="-sse4.2"
 matrix:
   include:
     - {os: linux, d: dmd-2.071.1, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
     - {os: linux, d: ldc-1.0.0, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
-    - {os: linux, d: ldc-1.0.0, env: ARCH="x86" CONF="--config=native-sse42", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-1.0.0, env: ARCH="x86" CONF="-sse4.2", addons: {apt: {packages: [[gcc-multilib]]}}}
 branches:
   only:
     - master
 script:
- - echo "$ARCH"
- - dub test --arch "$ARCH" "$CONF" -b unittest-cov
+ - echo $ARCH
+ - dub test --arch=$ARCH --build=unittest$CONF
 after_success:
  - bash <(curl -s https://codecov.io/bash)

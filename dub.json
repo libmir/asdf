@@ -4,14 +4,14 @@
 	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
-	"configurations": [
-		{
-			"name":"generic"
+	"buildTypes": {
+		"unittest-sse4.2": {
+			"buildOptions": ["unittests", "debugMode", "debugInfo"],
+			"dflags-ldc": ["-mattr=+sse4.2"]
 		},
-		{
-			"name": "native-sse42",
-			"versions-ldc": ["SSE42"],
-			"dflags-ldc": ["-mcpu=native"],
-		}
-	]
+		"unittest-cov-sse4.2": {
+			"buildOptions": ["unittests", "coverage", "debugMode", "debugInfo"],
+			"dflags-ldc": ["-mattr=+sse4.2"]
+		},
+	}
 }
