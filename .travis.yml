@@ -8,7 +8,7 @@ d:
  - ldc-1.1.0-beta2
 env:
  - ARCH="x86_64" CONF=""
- - ARCH="x86_64" CONF="-sse4.2"
+ - ARCH="x86_64" CONF="-sse42"
 matrix:
   include:
     - {os: linux, d: dmd-2.071.1, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
