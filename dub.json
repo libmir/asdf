@@ -5,11 +5,11 @@
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
 	"buildTypes": {
-		"unittest-sse4.2": {
+		"unittest-sse42": {
 			"buildOptions": ["unittests", "debugMode", "debugInfo"],
 			"dflags-ldc": ["-mattr=+sse4.2"]
 		},
-		"unittest-cov-sse4.2": {
+		"unittest-cov-sse42": {
 			"buildOptions": ["unittests", "coverage", "debugMode", "debugInfo"],
 			"dflags-ldc": ["-mattr=+sse4.2"]
 		},
