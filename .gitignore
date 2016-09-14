@@ -31,3 +31,5 @@ __test__generic__
 .generated
 
 web
+
+*.lst
