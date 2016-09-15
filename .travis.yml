@@ -13,7 +13,7 @@ matrix:
   include:
     - {os: linux, d: dmd-2.071.1, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
     - {os: linux, d: ldc-1.1.0-beta2, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
-    - {os: linux, d: ldc-1.1.0-beta2, env: ARCH="x86" CONF="-sse4.2", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-1.1.0-beta2, env: ARCH="x86" CONF="-sse42", addons: {apt: {packages: [[gcc-multilib]]}}}
 branches:
   only:
     - master
