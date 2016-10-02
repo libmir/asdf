@@ -438,11 +438,12 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 			data ^= c;
 		}
 		import std.utf: encode;
-		foreach(ch; buf[0 .. buf.encode(data)])
+		size_t len = buf.encode(data);
+		foreach(ch; buf[0 .. len])
 		{
 			oa.put1(ch);
 		}
-		return 1;
+		return cast(int)len;
 	}
 
 
@@ -582,7 +583,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 'u' :
 							c = readUnicode();
 							if(c > 0)
+							{
+								len += c;
 								continue;
+							}
 							goto default;
 						default  :
 					}
@@ -629,7 +633,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 'u' :
 							c = readUnicode();
 							if(c > 0)
+							{
+								len += c;
 								continue;
+							}
 							return -c;
 						default: return -c;
 					}
@@ -660,6 +667,15 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 		assert(data == parseJson(str));
 		foreach(i; 1 .. str.length)
 			assert(data == parseJson(str.representation.chunks(i)));
+	}
+
+	unittest
+	{
+		import std.string;
+		import std.range;
+		static immutable str = `"\u0026"`;
+		auto data = Asdf("&");
+		assert(data == parseJson(str));
 	}
 
 	// reads a number
