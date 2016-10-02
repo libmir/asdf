@@ -676,8 +676,6 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 		static immutable str = `"\u0026"`;
 		auto data = Asdf("&");
 		assert(data == parseJson(str));
-		foreach(i; 1 .. str.length)
-			assert(data == parseJson(str.representation.chunks(i)));
 	}
 
 	// reads a number
