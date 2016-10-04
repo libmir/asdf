@@ -584,7 +584,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 							c = readUnicode();
 							if(c > 0)
 							{
-								len += c;
+								len += c - 1;
 								continue;
 							}
 							goto default;
