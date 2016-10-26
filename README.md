@@ -14,7 +14,7 @@ JSON Objects or to custom data types.
 
 ❗️: Currently all ASDF Method names and all UDAs are in DRAFT state, we might want want make them simpler. Please submit an Issue if you have input.
 
-❗️: when filtering invalid records are ignored (see example below)
+❗️: when using the filter method invalid records are silently ignored per default. this is a feature, becase throwing an exception may be too expensive
 
 #### Why ASDF?
 
