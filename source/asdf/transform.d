@@ -6,7 +6,7 @@ Copyright: Tamedia Digital, 2016
 
 Authors: Ilya Yaroshenko
 
-License: MIT
+License: BSL-1.0
 +/
 module asdf.transformation;
 
