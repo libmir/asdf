@@ -15,6 +15,10 @@ import asdf.serialization;
 
 /++
 Object-tree structure for mutable Asdf representation.
+
+`AsdfNode` can be used to construct and manipulate JSON objects.
+Each `AsdfNode` can represent either a dynamic JSON object (associative array of `AsdfNode` nodes) or a ASDF JSON value.
+JSON arrays can be represented only as JSON values.
 +/
 struct AsdfNode
 {
