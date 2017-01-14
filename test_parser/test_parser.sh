@@ -1,4 +1,4 @@
-dub build
+dub build --compiler=ldc2
 if [ -d JSONTestSuite ]; then
 	echo "JSONTestSuite already exist"
 else
