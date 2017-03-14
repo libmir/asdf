@@ -233,7 +233,7 @@ unittest
 	import std.conv;
 	import std.algorithm : map;
 	import std.range : array;
-	string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" `{"key2": "b"}`;
+	string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" ~ `{"key2": "b"}`;
 	auto values = text.parseJsonByLine();
 	assert( values.front["key"] == "a");
 	values.popFront;
@@ -409,15 +409,10 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 			default : return -c;
 		}
 	}
-	
-	/++
-	Encodes `XXXX` to the UTF-8 buffer`, where `XXXX` expected to be hexadecimal character.
-	Returns: `1` on success.
-	+/
-	private int readUnicode()
+
+	private dchar readUnicodeImpl()
 	{
-		char[4] buf;
-		uint data = '\0';
+		dchar d = '\0';
 		foreach(i; 0..4)
 		{
 			int c = pop;
@@ -434,9 +429,37 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 					break;
 				default: return -c;
 			}
-			data <<= 4;
-			data ^= c;
+			d <<= 4;
+			d ^= c;
 		}
+		return d;
+	}
+
+	/++
+	Encodes `XXXX` to the UTF-8 buffer`, where `XXXX` expected to be hexadecimal character.
+	Returns: `1` on success.
+	+/
+	private int readUnicode()
+	{
+		char[4] buf = void;
+		dchar data = readUnicodeImpl;
+		if(0xD800 <= data && data <= 0xDFFF)
+		{
+			import std.exception: enforce;
+			enum msg = "Invalid surrogate UTF-16 sequence.";
+			enforce(pop == '\\', msg);
+			enforce(pop == 'u', msg);
+			enforce(data < 0xDC00, msg);
+			data = (data & 0x3FF) << 10;
+			dchar trailing = readUnicodeImpl;
+			enforce(0xDC00 <= trailing && trailing <= 0xDFFF);
+			data |= trailing & 0x3FF;
+			data += 0x10000;
+		}
+		if (0xFDD0 <= data && data <= 0xFDEF)
+			return 0;
+		if (((~0xFFFF & data) >> 0x10) <= 0x10 && (0xFFFF & data) >= 0xFFFE)
+			return 0;
 		import std.utf: encode;
 		size_t len = buf.encode(data);
 		foreach(ch; buf[0 .. len])
@@ -468,8 +491,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 				'\u0001', '\u001F',
 				'\"', '\"',
 				'\\', '\\',
-				'\u007f', '\u007f',
-				'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+				'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
 			byte16 str2 = str2E;
 			OL: for(;;)
 			{
@@ -582,7 +604,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 't' : oa.put1('\t'); continue;
 						case 'u' :
 							c = readUnicode();
-							if(c > 0)
+							if(c >= 0)
 							{
 								len += c - 1;
 								continue;
@@ -613,7 +635,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						return len + 5;
 					}
 				}
-				if(c < ' ' || c == '\u007f')
+				if(c < ' ')
 				{
 					return -c;
 				}
@@ -632,7 +654,7 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 						case 't' : c = '\t'; break;
 						case 'u' :
 							c = readUnicode();
-							if(c > 0)
+							if(c >= 0)
 							{
 								len += c;
 								continue;
@@ -947,4 +969,15 @@ package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 		oa.put4(len, s);
 		return len + 5;
 	}
+}
+
+unittest
+{
+	auto asdf = "[\"\u007F\"]".parseJson;
+}
+
+unittest
+{
+	auto f = `"\uD801\uDC37"`.parseJson;
+	assert(f == "\"\U00010437\"".parseJson);
 }

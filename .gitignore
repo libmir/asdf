@@ -33,3 +33,7 @@ __test__generic__
 web
 
 *.lst
+
+test_parser/test_json-asdf
+
+JSONTestSuite/
