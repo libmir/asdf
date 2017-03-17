@@ -33,7 +33,7 @@ package struct OutputArray
 	void put(in char[] str)
 	{
 		size_t newShift = shift + str.length;
-		if(newShift < data.length)
+		if(newShift > data.length)
 			extend(str.length);
 		data[shift .. newShift] = cast(ubyte[])str;
 		//assert(newShift > shift);
