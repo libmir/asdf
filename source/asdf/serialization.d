@@ -821,7 +821,7 @@ struct JsonSerializer(string sep)
 
 	///ditto
 	void putValue(Num)(Num num)
-		if (isNumeric!Num)
+		if (isNumeric!Num && !is(Num == enum))
 	{
 		putNumberValue(num);
 	}
@@ -1004,7 +1004,7 @@ struct AsdfSerializer
 
 	///ditto
 	void putValue(Num)(Num num)
-		if (isNumeric!Num)
+		if (isNumeric!Num && !is(Num == enum))
 	{
 		putNumberValue(num);
 	}
@@ -1068,7 +1068,7 @@ unittest
 
 /// Number serialization
 void serializeValue(S, V)(ref S serializer, in V value, FormatSpec!char fmt = FormatSpec!char.init)
-	if(isNumeric!V || is(V == BigInt))
+	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
 	serializer.putNumberValue(value, fmt);
 }
@@ -1089,6 +1089,19 @@ void serializeValue(S)(ref S serializer, bool value)
 unittest
 {
 	assert(serializeToJson(true) == `true`);
+}
+
+/// Enum serialization
+void serializeValue(S, V)(ref S serializer, in V value)
+	if(is(V == enum))
+{
+	serializer.putValue(value.to!string);
+}
+///
+unittest
+{
+	enum Key { foo }
+	assert(serializeToJson(Key.foo) == `"foo"`);
 }
 
 /// String serialization
@@ -1371,7 +1384,7 @@ unittest
 
 /// Deserialize numeric value
 void deserializeValue(V)(Asdf data, ref V value)
-	if(isNumeric!V || is(V : BigInt))
+	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
 	auto kind = data.kind;
 	if(kind != Asdf.Kind.number)
@@ -1388,6 +1401,23 @@ unittest
 	assert(deserialize!double(serializeToJson(20)) == double(20));
 	assert(deserialize!BigInt(serializeToAsdf(20)) == BigInt(20));
 	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
+}
+
+/// Deserialize enum value
+void deserializeValue(V)(Asdf data, ref V value)
+	if(is(V == enum))
+{
+	string s;
+	data.deserializeValue(s);
+	value = s.to!V;
+}
+
+///
+unittest
+{
+	enum Key { foo }
+	assert(deserialize!Key(`"foo"`) == Key.foo);
+	assert(deserialize!Key(serializeToAsdf("foo")) == Key.foo);
 }
 
 /++
