@@ -37,3 +37,7 @@ web
 test_parser/test_json-asdf
 
 JSONTestSuite/
+
+sajson-benchmark/sajson-benchmark
+
+.vscode
