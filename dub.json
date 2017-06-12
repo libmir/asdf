@@ -1,6 +1,6 @@
 {
 	"name": "asdf",
-	"description": "A Simple Document Format: JSON serialization library",
+	"description": "Fast, Expressive, and Easy to use JSON Serialization Library with optional SSE4 Optimization.",
 	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
