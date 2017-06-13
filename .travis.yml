@@ -20,6 +20,6 @@ branches:
 script:
  - echo $ARCH
  - dub test --arch=$ARCH --build=unittest$CONF
- - cd benchmarks/sajson && dub --root --build=release-nobounds --compiler=ldmd2
+ - cd benchmarks/sajson ; dub --build=release-nobounds --compiler=ldmd2 ; cd ../..
 after_success:
  - bash <(curl -s https://codecov.io/bash)
