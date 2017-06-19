@@ -241,6 +241,523 @@ unittest
 	values.popFront;
 }
 
+version(LDC)
+{
+    public import ldc.intrinsics: _expect = llvm_expect;
+}
+else
+{
+    T _expect(T)(T val, T expected_val) if (__traits(isIntegral, T))
+    {
+        return val;
+    }
+}
+
+enum AsdfErrorCode
+{
+	success,
+	unexpectedEnd,
+	unexpectedValue,
+}
+
+private __gshared immutable parseFlags[256] = [
+ // 0 1 2 3 4 5 6 7   8 9 A B C D E F
+	0,0,0,0,0,0,0,0,  0,6,6,0,0,6,0,0, // 0
+	0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0, // 1
+	3,1,0,1,1,1,1,1,  1,1,1,9,1,9,9,1, // 2
+	9,9,9,9,9,9,9,9,  9,1,1,1,1,1,1,1, // 3
+
+	1,1,1,1,1,9,1,1,  1,1,1,1,1,1,1,1, // 4
+	1,1,1,1,1,1,1,1,  1,1,1,1,0,1,1,1, // 5
+	1,1,1,1,1,9,1,1,  1,1,1,1,1,1,1,1, // 6
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1, // 7
+
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+	1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+];
+
+pragma(inline, true)
+bool isPlainJsonCharacter(size_t c)
+{
+	return parseFlags[c] & 1;
+}
+
+pragma(inline, true)
+bool isJsonWhitespace(size_t c)
+{
+	return parseFlags[c] & 2;
+}
+
+pragma(inline, true)
+bool isJsonLineWhitespace(size_t c)
+{
+	return parseFlags[c] & 4;
+}
+
+pragma(inline, true)
+bool isJsonNumber(size_t c)
+{
+	return parseFlags[c] & 8;
+}
+
+package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeValid, bool zeroTerminated, Allocator, Input = const(char)[])
+{
+
+	// align(64) ubyte[1024 * 4 + 64] buffer = void;
+	// align(64) ubyte[64] payload = void;
+	size_t[32] stack = void;
+	ubyte[] data;
+	size_t shift;
+	Allocator* allocator;
+	ubyte state;
+	Input input;
+
+	enum bool chunked = is(Input : const(char)[]);
+
+	this(ref Allocator allocator, Input input)
+	{
+		this.input = input;
+		this.allocator = &allocator;
+		state = State.value;
+	}
+
+	enum State
+	{
+		unexpected,
+		vObject,
+		vArray,
+		vNumber,
+		vString,
+		vFalse,
+		vNull,
+		vTrue,
+	}
+
+	State state;
+	size_t length;
+	size_t stringAndNumberShift;
+	bool unfinished;
+
+	AsdfErrorCode parse()
+	{
+		data = allocator.allocate(strEnd - strPtr * 6);
+
+		bool prepareInput()
+		{
+		prepareInputCheck:
+			if (_expect(strEnd == strPtr, false))
+			{
+				static if (chunked)
+				{
+					if (input.empty)
+					{
+						return false;
+					}
+					str = input.front;
+					input.popFront;
+					goto prepareInputCheck;
+				}
+				else
+				{
+					goto false;
+				}
+			}
+			return true;
+		}
+
+		static if (hasSpaces)
+		void skipSpaces()
+		{
+			pragma(inline, false);
+			auto innerStr = str;
+			for(;;)
+			{
+				if (_expect(innerStrPtr == strEnd, false))
+				{
+					if (input.empty)
+					{
+						str = null;
+						return;
+					}
+					innerStr = input.front;
+					input.popFront;
+					continue;
+				}
+				
+				static if (includingNewLine)
+					alias isWhite = isJsonWhitespace;
+				else
+					alias isWhite = isJsonLineWhitespace;
+				auto r = isJsonLineWhitespace
+				if (isWhite(innerStr[0]))
+				{
+					innerStr = innerStr[1 .. 0];
+					continue;
+				}
+				str = innerStr;
+				return;
+				}
+			}
+		}
+
+		typeof(return) retCode;
+		// auto ptr = data.ptr + dataLength;
+		// State curr = void;
+		// State afterSpace = void;
+		// State next = State.end;
+		// static if (hasSpaces)
+		// {
+		// 	auto next = State.value;
+		// 	enum start = State.spaces;
+		// }
+		// else
+		// {
+		// 	State next = end;
+		// 	enum start = State.value;
+		// }
+		size_t len;
+		with(State) switch (state)
+		{
+		ret:
+			return retCode;
+	
+		vValue_unexpectedEnd : state = vValue ; goto unexpectedEnd;
+		vString_unexpectedEnd: state = vString; goto unexpectedEnd;
+		vArray_unexpectedEnd : state = vArray ; goto unexpectedEnd;
+		vObject_unexpectedEnd: state = vObject; goto unexpectedEnd;
+
+		vString_unexpectedValue: state = vString; goto unexpectedValue;
+		vArray_unexpectedValue : state = vArray ; goto unexpectedValue;
+		vObject_unexpectedValue: state = vObject; goto unexpectedValue;
+
+		vTrue_unexpectedEnd : state = vTrue ; goto unexpectedEnd;
+		vFalse_unexpectedEnd: state = vFalse; goto unexpectedEnd;
+		vNull_unexpectedEnd : state = vNull ; goto unexpectedEnd;
+		vTrue_unexpectedValue : state = vTrue ; goto unexpectedValue;
+		vFalse_unexpectedValue: state = vFalse; goto unexpectedValue;
+		vNull_unexpectedValue : state = vNull ; goto unexpectedValue;
+
+		bool currIsKey = void;
+
+		static if (hasSpaces)
+		{
+		case spaces;
+			// version(SSE42)
+			// {
+			// }
+			// else
+			{
+			}
+		spaces_ret:
+			state = spaces;
+			goto ret;
+		}
+
+		value:
+			static if (hasSpaces)
+			{
+				skipSpaces;
+				if (_expect(strPtr == strEnd, false))
+					goto vValue_unexpectedEnd;
+			}
+
+			switch(str[0])
+			{
+			stringValue:
+			case '"':
+				currIsKey = false;
+				stringAndNumberShift = shift;
+				shift += 4;
+				goto string;
+			case '-':
+			case '0':
+			..
+			case '9':
+				*dataPtr++ = *strPtr*; 
+				for(;;)
+				{
+					if (!prepareInput)
+						goto finishValue;
+
+					while(zeroTerminated || strEnd > strPtr + 4)
+					{
+						char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto found0;
+						char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isJsonNumber(c1)) goto found1;
+						char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isJsonNumber(c2)) goto found2;
+						char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isJsonNumber(c3)) goto found3;
+						strPtr += 4;		 dataPtr[-1] = c3;
+					}
+					static if (!zeroTerminated)
+					{
+						while(strEnd > strPtr)
+						{
+							char c0 = strPtr[0]; if (!isJsonNumber(c0)) goto found0; dataPtr[0] = c0;
+							strPtr += 1;
+							dataPtr += 1;
+						}
+						continue;
+					}
+				found3: dataPtr++; strPtr++;
+				found2: dataPtr++; strPtr++;
+				found1: dataPtr++; strPtr++;
+					dataPtr -= 4;
+				found0:
+					// TODO
+				}
+			case '[': goto vArray;
+
+			foreach (name; AliasSeq!("false", "null", "true"))
+			{
+			case name[0]:
+					if (_expect(strEnd - strPtr >= name.length, true))
+					{
+						static if (!assumeValid)
+						{
+							char[name.length] c = void;
+							foreach (i; aliasSeqOf!(iota(1, name.length)))
+								c[i - 1] = str[i];
+							foreach (i; aliasSeqOf!(iota(1, name.length)))
+							{
+								if (_expect(c[i] != name[i]))
+								{
+									static if (name == "true")
+										goto vTrue_unexpectedValue;
+									else
+									static if (name == "false")
+										goto vFalse_unexpectedValue;
+									else
+										goto vNull_unexpectedValue;
+								}
+							}
+						}
+						strPtr += name.length;
+						goto next;
+					}
+					else
+					{
+						static if (chunked)
+						{
+							strPtr += 1;
+							foreach (i; 1 .. name.length)
+							{
+								while (strPtr == strEnd)
+								{
+									if (_expect(input.empty, false))
+										goto FNT_unexpectedEnd;
+									str = input.front;
+									input.popFront;
+								}
+								static if (!assumeValid)
+								{
+									if (_expect(str[0] != name[i], false))
+									{
+										state = vFalse0 + i;
+										goto ret;	
+									}
+								}
+								strPtr += 1;
+							}
+							goto next;
+					FNT_unexpectedEnd:
+						}
+						static if (name == "true")
+							goto vTrue_unexpectedEnd;
+						else
+						static if (name == "false")
+							goto vFalse_unexpectedEnd;
+						else
+							goto vNull_unexpectedEnd;
+					}
+			}
+
+			case '{': goto vObject;
+			default : goto value_ret;
+			}
+
+		// key:
+		// 	currIsKey = true;
+		// 	stringAndNumberShift = shift;
+		// 	shift += 1;
+		// 	goto string;
+
+		string:
+			assert(str[0] == '"');
+			strPtr += 1;
+
+			len = 0;
+			// version(SSE42)
+			// {
+			// }
+			// else
+			{
+				for(;;)
+				{
+					if (!prepareInput)
+						goto vString_unexpectedEnd;
+
+					while(zeroTerminated || strEnd > strPtr + 4)
+					{
+						char c0 = strPtr[0]; dataPtr += 4;    if (!isPlainJsonCharacter(c0)) goto found0;
+						char c1 = strPtr[1]; dataPtr[0] = c0; if (!isPlainJsonCharacter(c1)) goto found1;
+						char c2 = strPtr[2]; dataPtr[1] = c1; if (!isPlainJsonCharacter(c2)) goto found2;
+						char c3 = strPtr[3]; dataPtr[2] = c2; if (!isPlainJsonCharacter(c3)) goto found3;
+						strPtr += 4;         dataPtr[3] = c3;
+					}
+					static if (!zeroTerminated)
+					{
+						while(strEnd > strPtr)
+						{
+							char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto found0; dataPtr[0] = c0;
+							strPtr += 1;
+							dataPtr += 1;
+						}
+						continue;
+					}
+				found3: dataPtr++; strPtr++;
+				found2: dataPtr++; strPtr++;
+				found1: dataPtr++; strPtr++;
+					dataPtr -= 4;
+				found0:
+					auto c = strPtr[0];
+					if (c == '\"')
+					{
+						strPtr += 1;
+						if (currIsKey)
+						{
+							// TODO
+						}
+						else
+						{
+							// TODO
+						}
+					}
+					if (c == '\\')
+					{
+						strPtr += 1;
+						if (!prepareInput)
+							goto vString_unexpectedEnd;
+						c = strPtr[0];
+						strPtr += 1;
+						switch(c)
+						{
+							case '/' :           goto backSlashReplace;
+							case '\"':           goto backSlashReplace;
+							case '\\':           goto backSlashReplace;
+							case 'b' : c = '\b'; goto backSlashReplace;
+							case 'f' : c = '\f'; goto backSlashReplace;
+							case 'n' : c = '\n'; goto backSlashReplace;
+							case 'r' : c = '\r'; goto backSlashReplace;
+							case 't' : c = '\t'; goto backSlashReplace;
+							backSlashReplace:
+								*dataPtr++ = c;
+								continue;
+							case 'u' :
+								dchar d = '\0';
+								foreach(i; 0..4)
+								{
+									if (!prepareInput)
+										goto vString_unexpectedEnd;
+									c = strPtr[0];
+									switch(c)
+									{
+										case '0': .. case '9':
+											c = c - '0';
+											break;
+										case 'a': .. case 'f':
+											c = c - 'a' + 10;
+											break;
+										case 'A': .. case 'F':
+											c = c - 'A' + 10;
+											break;
+										goto vString_unexpectedValue;
+									}
+									strPtr += 1;
+									d <<= 4;
+									d ^= c;
+								}
+								auto wur = writeUnicode(d, dataPtr);
+								if (_expect(wur == false, false))
+									vString_unexpectedValue;
+								dataPtr = wur;
+								continue;
+							default: goto vString_unexpectedValue;
+						}
+					}
+					goto vString_unexpectedValue;
+				}
+			}
+		}
+	}
+}
+
+bool writeUnicode(dchar data, ref ubyte* dataPtr,)
+{
+	if (_expect(0xD800 <= data && data <= 0xDFFF, false))
+	{
+		import std.exception: enforce;
+		enum msg = "Invalid surrogate UTF-16 sequence.";
+		if(!(pop == '\\', msg))
+			return false;
+		if(!(pop == 'u', msg))
+			return false;
+		if(!(data < 0xDC00, msg))
+			return false;
+		data = (data & 0x3FF) << 10;
+		dchar trailing = readUnicodeImpl;
+		if(!(0xDC00 <= trailing && trailing <= 0xDFFF))
+			return false;
+		data |= trailing & 0x3FF;
+		data += 0x10000;
+	}
+	if (0xFDD0 <= data && data <= 0xFDEF)
+		return true; // TODO: review
+	if (((~0xFFFF & data) >> 0x10) <= 0x10 && (0xFFFF & data) >= 0xFFFE)
+		return true; // TODO: review 
+	encodeUTF8(data, dataPtr);
+	return true;
+}
+
+void encodeUTF8(dchar c, ref ubyte* ptr)
+{
+	if (c < 0x80)
+	{
+		ptr[0] = c;
+		ptr += 1;
+	}
+	else
+	if (c < 0x800)
+	{
+		ptr[0] = 0xC0 | (c >> 6);
+		ptr[1] = 0x80 | (c & 0x3F);
+		ptr += 2;
+	}
+	else
+	if (c < 0x10000)
+	{
+		ptr[0] = 0xE0 | (c >> 12);
+		ptr[1] = 0x80 | ((c >> 6) & 0x3F);
+		ptr[2] = 0x80 | (c & 0x3F);
+		ptr += 3;
+	}
+	else
+	{
+		assert(c < 0x200000);
+		ptr[0] = 0xF0 | (c >> 18);
+		ptr[1] = 0x80 | ((c >> 12) & 0x3F);
+		ptr[2] = 0x80 | ((c >> 6) & 0x3F);
+		ptr[3] = 0x80 | (c & 0x3F);
+		ptr += 4;
+	}
+}
+
+
 package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
 {
 	const(ubyte)[] r;
