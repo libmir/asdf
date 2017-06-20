@@ -342,7 +342,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
     State state;
     size_t length;
-    size_t stringAndNumberShift;
     bool unfinished;
 
     AsdfErrorCode parse()
@@ -495,6 +494,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     
         size_t[32] stack = void;
         size_t stackIndex = -1;
+        ubyte* stringAndNumberShift = void;
 
         typeof(return) retCode;
         // auto ptr = data.ptr + dataLength;
@@ -545,15 +545,17 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             stringValue:
             case '"':
                 currIsKey = false;
-                stringAndNumberShift = shift;
-                shift += 4;
+                *dataPtr++ = Asdf.Kind.string;
+                stringAndNumberShift = dataPtr;
+                // reserve 4 byte for the length
+                dataPtr += 4;
                 goto string;
             case '-':
             case '0':
             ..
             case '9': {
                 *dataPtr++ = Asdf.Kind.number;
-                auto numberShift = dataPtr;
+                stringAndNumberShift = dataPtr;
                 // reserve 1 byte for the length
                 dataPtr++;
                 // write the first character
@@ -587,11 +589,11 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     dataPtr -= 4;
                 number_found0:
 
-                auto numberLength = dataPtr - numberShift - 1;
+                auto numberLength = dataPtr - stringAndNumberShift - 1;
                 writeln("numberLength = ", numberLength);
                 if (numberLength > 256)
                     goto vNull_unexpectedValue; // TODO: replace proper error
-                *numberShift = cast(ubyte) numberLength;
+                *stringAndNumberShift = cast(ubyte) numberLength;
                 goto next;
             }
             case '[': 
@@ -688,13 +690,12 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             assert(*strPtr == '"');
             strPtr += 1;
 
-            len = 0;
             // version(SSE42)
             // {
             // }
             // else
             {
-                for(;;)
+                StringLoop: for(;;)
                 {
                     if (!prepareInput)
                         goto vString_unexpectedEnd;
@@ -702,10 +703,10 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     while(zeroTerminated || strEnd > strPtr + 4)
                     {
                         char c0 = strPtr[0]; dataPtr += 4;    if (!isPlainJsonCharacter(c0)) goto string_found0;
-                        char c1 = strPtr[1]; dataPtr[0] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
-                        char c2 = strPtr[2]; dataPtr[1] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
-                        char c3 = strPtr[3]; dataPtr[2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
-                        strPtr += 4;         dataPtr[3] = c3;
+                        char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
+                        char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
+                        char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
+                        strPtr += 4;         dataPtr[-1] = c3;
                     }
                     static if (!zeroTerminated)
                     {
@@ -715,59 +716,66 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                             strPtr += 1;
                             dataPtr += 1;
                         }
-                        continue;
                     }
-                string_found3: dataPtr++; strPtr++;
-                string_found2: dataPtr++; strPtr++;
-                string_found1: dataPtr++; strPtr++;
-                    dataPtr -= 4;
-                string_found0:
-                    uint c = strPtr[0];
-                    if (c == '\"')
-                    {
-                        strPtr += 1;
-                        if (currIsKey)
-                        {
-                            // TODO
-                        }
-                        else
-                        {
-                            // TODO
-                        }
-                    }
-                    if (c == '\\')
-                    {
-                        strPtr += 1;
-                        if (!prepareInput)
-                            goto vString_unexpectedEnd;
-                        c = strPtr[0];
-                        strPtr += 1;
-                        switch(c)
-                        {
-                            case '/' :           goto backSlashReplace;
-                            case '\"':           goto backSlashReplace;
-                            case '\\':           goto backSlashReplace;
-                            case 'b' : c = '\b'; goto backSlashReplace;
-                            case 'f' : c = '\f'; goto backSlashReplace;
-                            case 'n' : c = '\n'; goto backSlashReplace;
-                            case 'r' : c = '\r'; goto backSlashReplace;
-                            case 't' : c = '\t'; goto backSlashReplace;
-                            backSlashReplace:
-                                *dataPtr++ = cast(ubyte) c;
-                                continue;
-                            case 'u' :
-                                auto wur = writeUnicode();
-                                if (wur == 0)
-                                    continue;
-                                if (wur == 1)
-                                    goto vString_unexpectedEnd;
-                                assert (wur == -1);
-                                goto vString_unexpectedValue;
-                            default: goto vString_unexpectedValue;
-                        }
-                    }
-                    goto vString_unexpectedValue;
                 }
+            string_found3: dataPtr++; strPtr++;
+            string_found2: dataPtr++; strPtr++;
+            string_found1: dataPtr++; strPtr++;
+                dataPtr -= 4;
+            string_found0:
+                uint c = strPtr[0];
+                if (c == '\"')
+                {
+                    strPtr += 1;
+                    if (currIsKey)
+                    {
+                        // TODO
+                    }
+                    else
+                    {
+                        auto stringLength = dataPtr - stringAndNumberShift - 4;
+                        writeln("stringLength = ", stringLength);
+                        if (stringLength > 256)
+                            goto vNull_unexpectedValue; // TODO: replace proper error
+                        version(X86_64)
+                            *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
+                        else
+                            static assert(0);
+                        goto next;
+                    }
+                }
+                if (c == '\\')
+                {
+                    strPtr += 1;
+                    if (!prepareInput)
+                        goto vString_unexpectedEnd;
+                    c = strPtr[0];
+                    strPtr += 1;
+                    switch(c)
+                    {
+                        case '/' :           goto backSlashReplace;
+                        case '\"':           goto backSlashReplace;
+                        case '\\':           goto backSlashReplace;
+                        case 'b' : c = '\b'; goto backSlashReplace;
+                        case 'f' : c = '\f'; goto backSlashReplace;
+                        case 'n' : c = '\n'; goto backSlashReplace;
+                        case 'r' : c = '\r'; goto backSlashReplace;
+                        case 't' : c = '\t'; goto backSlashReplace;
+                        backSlashReplace:
+                            *dataPtr++ = cast(ubyte) c;
+                            goto StringLoop;
+                        case 'u' :
+                            auto wur = writeUnicode();
+                            if (wur == 0)
+                                goto StringLoop;
+                            if (wur == 1)
+                                goto vString_unexpectedEnd;
+                            assert (wur == -1);
+                            goto vString_unexpectedValue;
+                        default: goto vString_unexpectedValue;
+                    }
+                }
+                goto vString_unexpectedValue;
             }
         }
     ret:
@@ -817,10 +825,11 @@ unittest
     assert(parseJsonNew(`false  `).to!string == `false`);
     assert(parseJsonNew(`4`).to!string == `4`);
     assert(parseJsonNew(`   4121231.23e-12321 `).to!string == `4121231.23e-12321`);
+    assert(parseJsonNew(`"asdfgr"`).to!string == `"asdfgr"`);
 }
 
 void encodeUTF8(dchar c, ref ubyte* ptr)
-{
+{   
     if (c < 0x80)
     {
         ptr[0] = cast(ubyte) (c);
