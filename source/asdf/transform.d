@@ -371,9 +371,3 @@ struct AsdfNode
 		assert(diff == AsdfNode(`{"foo":"bar","inner":{"a":false,"c":"32323","e":{}}}`.parseJson));
 	}
 }
-
-unittest
-{
-    import std.stdio;
-    writeln(__MODULE__);
-}
