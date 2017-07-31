@@ -8,7 +8,7 @@ Authors: Ilya Yaroshenko
 
 License: BSL-1.0
 +/
-module asdf.transformation;
+module asdf.transform;
 
 import asdf.asdf;
 import asdf.serialization;
@@ -370,4 +370,10 @@ struct AsdfNode
 		auto diff = AsdfNode(node2.added(node1));
 		assert(diff == AsdfNode(`{"foo":"bar","inner":{"a":false,"c":"32323","e":{}}}`.parseJson));
 	}
+}
+
+unittest
+{
+    import std.stdio;
+    writeln(__MODULE__);
 }

@@ -12,6 +12,18 @@
 		"unittest-cov-sse42": {
 			"buildOptions": ["unittests", "coverage", "debugMode", "debugInfo"],
 			"dflags-ldc": ["-mattr=+sse4.2"]
-		},
-	}
+		}
+	},
+    "configurations": [
+        { "name": "library" },
+        {
+            "name": "unittest",
+            "targetType": "executable",
+            "preBuildCommands": ["dub run unit-threaded -c gen_ut_main -- -f bin/ut.d"],
+            "mainSourceFile": "bin/ut.d",
+            "dependencies": {
+                "unit-threaded": "~>0.7.28"
+            }
+        }
+    ]
 }

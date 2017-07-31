@@ -2096,3 +2096,9 @@ private template aliasSeqOf(alias range)
 		}
 	}
 }
+
+unittest
+{
+    import std.stdio;
+    writeln(__MODULE__);
+}

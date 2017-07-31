@@ -130,7 +130,7 @@ struct Asdf
 		import std.conv: to;
 		import asdf.jsonparser;
 		assert(Asdf("begin\u000bend").to!string == `"begin\u000Bend"`);
-		assert("begin\u000bend" == cast(string) `"begin\u000Bend"`.parseJson, cast(string) `"begin\u000Bend"`.parseJson);
+		assert("begin\u000bend" == cast(string) `"begin\u000Bend"`.parseJson, to!string(cast(ubyte[]) cast(string)( `"begin\u000Bend"`.parseJson)));
 	}
 
 	/// Sets deleted bit on

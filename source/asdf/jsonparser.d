@@ -97,6 +97,7 @@ unittest
     assert(ch.parseJson(ch.front, 32).data == [1]);
 }
 
+
 /++
 Parses json value
 Params:
@@ -107,11 +108,32 @@ Returns:
 +/
 Asdf parseJson(
     Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
-    Flag!"spaces" spaces = Yes.spaces)
-    (in char[] str, size_t initLength = 32)
+    Flag!"spaces" spaces = Yes.spaces, 
+    Flag!"assumeValid" assumeValid = No.assumeValid,
+    Flag!"zeroTerminated" zeroTerminated = No.zeroTerminated,
+    Allocator,
+    )
+    (in char[] str, Allocator allocator)
 {
-    import std.range: only;
-    return parseJson!(includingNewLine, spaces)(only(cast(const ubyte[])str), cast(const ubyte[])str, initLength);
+    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, zeroTerminated, Allocator, const(char)[])(allocator, str);
+    parser.parse();
+    return Asdf(parser.data);
+}
+
+/// ditto
+Asdf parseJson(
+    Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
+    Flag!"spaces" spaces = Yes.spaces, 
+    Flag!"assumeValid" assumeValid = No.assumeValid,
+    Flag!"zeroTerminated" zeroTerminated = No.zeroTerminated,
+    )
+    (in char[] str)
+{
+    import std.experimental.allocator;
+    import std.experimental.allocator.gc_allocator;
+   auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, zeroTerminated, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
+    parser.parse();
+    return Asdf(parser.data);
 }
 
 ///
@@ -266,7 +288,7 @@ private __gshared immutable ubyte[256] parseFlags = [
     0,0,0,0,0,0,0,0,  0,6,6,0,0,6,0,0, // 0
     0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0, // 1
     3,1,0,1,1,1,1,1,  1,1,1,9,1,9,9,1, // 2
-    9,9,9,9,9,9,9,9,  9,1,1,1,1,1,1,1, // 3
+    9,9,9,9,9,9,9,9,  9,9,1,1,1,1,1,1, // 3
 
     1,1,1,1,1,9,1,1,  1,1,1,1,1,1,1,1, // 4
     1,1,1,1,1,1,1,1,  1,1,1,1,0,1,1,1, // 5
@@ -285,25 +307,25 @@ private __gshared immutable ubyte[256] parseFlags = [
 ];
 
 pragma(inline, true)
-bool isPlainJsonCharacter(size_t c)
+bool isPlainJsonCharacter()(size_t c)
 {
     return (parseFlags[c] & 1) != 0;
 }
 
 pragma(inline, true)
-bool isJsonWhitespace(size_t c)
+bool isJsonWhitespace()(size_t c)
 {
     return (parseFlags[c] & 2) != 0;
 }
 
 pragma(inline, true)
-bool isJsonLineWhitespace(size_t c)
+bool isJsonLineWhitespace()(size_t c)
 {
     return (parseFlags[c] & 4) != 0;
 }
 
 pragma(inline, true)
-bool isJsonNumber(size_t c)
+bool isJsonNumber()(size_t c)
 {
     return (parseFlags[c] & 8) != 0;
 }
@@ -344,6 +366,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     size_t length;
     bool unfinished;
 
+    pragma(inline, false)
     AsdfErrorCode parse()
     {
         const(ubyte)* strPtr;
@@ -358,17 +381,15 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             strEnd = cast(const(ubyte)*) input.ptr + input.length;
         }
         data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
-        data[] = 0;
-        import std.stdio;
-        // writeln(data.length);
+        // data[] = 0;
         auto dataPtr = data.ptr;
 
-        bool prepareInput()
+        static if (chunked)
         {
-        prepareInputCheck:
-            if (_expect(strEnd == strPtr, false))
+            bool prepareInput()()
             {
-                static if (chunked)
+            prepareInputCheck:
+                if (_expect(strEnd == strPtr, false))
                 {
                     if (input.empty)
                     {
@@ -380,12 +401,12 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     strEnd = std.ptr + str.length;
                     goto prepareInputCheck;
                 }
-                else
-                {
-                    return false;
-                }
+                return true;
             }
-            return true;
+        }
+        else
+        {
+            enum prepareInput = true;
         }
 
         static if (hasSpaces)
@@ -433,6 +454,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
         int readUnicode(out dchar d)
         {
+            d = '\0';
             foreach(i; 0..4)
             {
                 if (!prepareInput)
@@ -470,27 +492,27 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     return -1;
                 if (!prepareInput)
                     return 1;
-                if (strPtr[0] != '\\')
+                if (*strPtr++ != '\\')
                     return -1;
                 if (!prepareInput)
                     return 1;
-                if (strPtr[0] != 'u')
+                if (*strPtr++ != 'u')
                     return -1;
                 d = (d & 0x3FF) << 10;
                 dchar trailing;
                 if (auto r = (readUnicode(trailing)))
                     return r;
                 if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
-                    return false;
+                    return -1;
                 d |= trailing & 0x3FF;
                 d += 0x10000;
             }
             if (0xFDD0 <= d && d <= 0xFDEF)
-                return true; // TODO: review
+                return -1; // TODO: review
             if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
-                return true; // TODO: review 
+                return -1; // TODO: review 
             encodeUTF8(d, dataPtr);
-            return true;
+            return 0;
         }
     
         size_t[32] stack = void;
@@ -562,14 +584,12 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 stackValue = stack[stackIndex - 1];
                 const isObject = stackValue & 1;
                 auto v = *strPtr++;
-                    // writeln("------- ", isObject);
                 if (isObject)
                 {
                     if (v == ',')
                         goto key;
                     if (v != '}')
                         goto vObject_unexpectedValue;
-                    // writeln("-------");
                 }
                 else
                 {
@@ -584,9 +604,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             const structureShift = stackValue >> 1;
             const structureLengthPtr = data.ptr + structureShift;
             const size_t structureLength = dataPtr - structureLengthPtr - 4;
-            // writeln("stackIndex = ", stackIndex);
-            // writeln("structureShift = ", structureShift);
-            // writeln("structureLength = ", structureLength);
             if (structureLength > uint.max)
                 goto vArray_unexpectedValue; //TODO: proper error
             version(X86_64)
@@ -625,7 +642,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 {
                     if (!prepareInput)
                         goto number_found;
-
                     while(zeroTerminated || strEnd > strPtr + 4)
                     {
                         char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto number_found0;
@@ -651,7 +667,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             number_found:
 
                 auto numberLength = dataPtr - stringAndNumberShift - 1;
-                // writeln("numberLength = ", numberLength);
                 if (numberLength > 256)
                     goto vNull_unexpectedValue; // TODO: replace proper error
                 *stringAndNumberShift = cast(ubyte) numberLength;
@@ -662,20 +677,17 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 *dataPtr++ = Asdf.Kind.object;
                 stack[stackIndex++] = ((dataPtr - data.ptr) << 1) ^ 1;
                 dataPtr += 4;
-                // writeln("stackIndex = ", stackIndex);
                 goto first_object_element;
             case '[': 
                 strPtr++;
                 *dataPtr++ = Asdf.Kind.array;
                 stack[stackIndex++] = ((dataPtr - data.ptr) << 1) ^ 0;
                 dataPtr += 4;
-                // writeln("stackIndex = ", stackIndex);
                 goto first_array_element;
 
             foreach (name; AliasSeq!("false", "null", "true"))
             {
             case name[0]:
-                    // writeln(name);
                     if (_expect(strEnd - strPtr >= name.length, true))
                     {
                         static if (!assumeValid)
@@ -688,7 +700,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                             {
                                 if (c[i - 1] != name[i])
                                 {
-                                    // writeln("sss");
                                     static if (name == "true")
                                         goto vTrue_unexpectedValue;
                                     else
@@ -773,7 +784,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
                     while(zeroTerminated || strEnd > strPtr + 4)
                     {
-                        // writeln("dp: ", cast(char)strPtr[0]);
                         char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
                         char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
                         char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
@@ -803,7 +813,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     if (currIsKey)
                     {
                         auto stringLength = dataPtr - stringAndNumberShift - 1;
-                        // writeln("keyLength = ", stringLength);
                         if (stringLength > 256)
                             goto vNull_unexpectedValue; // TODO: replace proper error
                         version(X86_64)
@@ -822,7 +831,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     else
                     {
                         auto stringLength = dataPtr - stringAndNumberShift - 4;
-                        // writeln("stringLength = ", stringLength);
                         if (stringLength > uint.max)
                             goto vNull_unexpectedValue; // TODO: replace proper error
                         version(X86_64)
@@ -891,22 +899,10 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     }
 }
 
-Asdf parseJsonNew(string str)
-{
-    import std.experimental.allocator;
-    import std.experimental.allocator.gc_allocator;
-    // (bool includingNewLine, bool hasSpaces, bool assumeValid, bool zeroTerminated, Allocator, Input = const(char)[])
-    auto parser = JsonParserNew!(true, true, false, false, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
-    parser.parse();
-    return Asdf(parser.data);
-}
-
 unittest
 {
-    import std.stdio;
     import std.conv;
     // auto True = parseJsonNew("true");
-    // writeln(True.data);
 
     // assert(parseJsonNew(`   true`).to!string == `true`);
     // assert(parseJsonNew(`    null `).to!string == `null`);
@@ -914,20 +910,9 @@ unittest
     // assert(parseJsonNew(`4`).to!string == `4`);
     // assert(parseJsonNew(`   4121231.23e-12321 `).to!string == `4121231.23e-12321`);
     // assert(parseJsonNew(`"asdfgr"`).to!string == `"asdfgr"`);
-    // writeln(parseJsonNew(`[true]`).data);
-    auto asdf_data = parseJsonNew(` [ true, 123 , [ false, 123.0 , "123211" ], "3e23e" ] `);
+    auto asdf_data = parseJson(` [ true, 123 , [ false, 123.0 , "123211" ], "3e23e" ] `);
     auto str = asdf_data.to!string;
     auto str2 = `[true,123,[false,123.0,"123211"],"3e23e"]`;
-    // writeln(str);
-    // writeln(str2);
-    // writeln(cast(ubyte[]) str);
-    // writeln(cast(ubyte[]) str2);
-    // writeln(asdf_data.data);
-    // writeln(str.length);
-    // writeln(str2.length);
-    // writeln(`  { "a"    : {     "true"       : 1212123 , "2323" : "ssss" } ,  "dd" : null }`.parseJsonNew.data);
-    // writeln(`  { "a"    : {     "true"       : 1212123 , "2323" : "ssss" } ,  "dd" : null }`.parseJsonNew);
-    // writeln(`{"a":true}`.parseJsonNew);
     assert( str == str2);
 }
 
@@ -955,7 +940,7 @@ void encodeUTF8(dchar c, ref ubyte* ptr)
     }
     else
     {
-        assert(c < 0x200000);
+    //    assert(c < 0x200000);
         ptr[0] = cast(ubyte) (0xF0 | (c >> 18));
         ptr[1] = cast(ubyte) (0x80 | ((c >> 12) & 0x3F));
         ptr[2] = cast(ubyte) (0x80 | ((c >> 6) & 0x3F));
