@@ -28,7 +28,7 @@ immutable int max_string_length = files.map!"a.length".reduce!max + folder.lengt
 void run_benchmark(string fileName)
 {
     auto text =  cast(string) fileName.read;
-    text ~= '\0';
+    // text ~= '\0';
     const size_t N = 1000;
     Duration minTime = Duration.max, avgTime;
 
@@ -43,7 +43,7 @@ void run_benchmark(string fileName)
             Yes.includingNewLine,
             Yes.spaces,
             No.assumeValid,
-            Yes.zeroTerminated,
+            No.zeroTerminated,
         )(Mallocator.instance);
         sw.stop;
         Mallocator.instance.deallocate(json.data.ptr[0 .. text.length * 6]);
