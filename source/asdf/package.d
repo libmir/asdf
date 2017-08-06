@@ -33,7 +33,7 @@ unittest
 			.byChunk(4096)
 			// Use approximate size of an object.
 			// Size of the internal buffer would be extended automatically
-			.parseJsonByLine(4096)
+			.parseJsonByLine
 			.filter!(object => object["gender"] == val)
 			.count;
 	}
