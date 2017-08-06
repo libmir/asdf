@@ -304,8 +304,6 @@ bool isJsonNumber()(size_t c)
 package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeValid, bool zeroTerminated, Allocator, Input = const(ubyte)[])
 {
 
-    // align(64) ubyte[1024 * 4 + 64] buffer = void;
-    // align(64) ubyte[64] payload = void;
     ubyte[] data;
     Allocator* allocator;
     Input input;
@@ -396,18 +394,10 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     }
 
     State state;
-    size_t length;
-    bool unfinished;
 
     auto result()()
     {
         return data[0 .. dataLength];
-    }
-
-    void clear()()
-    {
-        dataPtr = data;
-
     }
 
     pragma(inline, false)
