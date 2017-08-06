@@ -859,7 +859,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                         auto stringLength = dataPtr - stringAndNumberShift - 4;
                         if (stringLength > uint.max)
                             goto vNull_unexpectedValue; // TODO: replace proper error
-                        version(X86_64)
+                        version(X86_Any)
                             *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
                         else
                             static assert(0);
