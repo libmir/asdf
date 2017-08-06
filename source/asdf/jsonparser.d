@@ -556,8 +556,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
         {
         default: assert(0);
         key:
-            static if (hasSpaces)
-                skipSpaces;
             if (!skipSpaces)
                 goto vObject_unexpectedEnd; // TODO
         key_start:
@@ -570,18 +568,14 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             goto string;
 
         first_object_element:
-            static if (hasSpaces)
-                skipSpaces;
-            if (!prepareInput)
+            if (!skipSpaces)
                 goto vValue_unexpectedEnd; // TODO
             if (*strPtr != '}')
                 goto key_start;
             strPtr++;
             goto structure_end;
         first_array_element:
-            static if (hasSpaces)
-                skipSpaces;
-            if (!prepareInput)
+            if (!skipSpaces)
                 goto vValue_unexpectedEnd; // TODO
             if (*strPtr != ']')
                 goto value_start;
@@ -591,9 +585,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             if (stackIndex == 0)
                 goto ret;
             {
-                static if (hasSpaces)
-                    skipSpaces();
-                if (!prepareInput)
+                if (!skipSpaces)
                     goto vArray_unexpectedEnd; // TODO: proper error
                 stackValue = stack[stackIndex - 1];
                 const isObject = stackValue & 1;
@@ -835,9 +827,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                         if (stringLength > ubyte.max)
                             goto vNull_unexpectedValue; // TODO: replace proper error
                         *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
-                        static if (hasSpaces)
-                            skipSpaces();
-                        if (!prepareInput)
+                        if (!skipSpaces)
                             goto vArray_unexpectedEnd; // TODO: proper error
                         if (*strPtr != ':')
                             goto vObject_unexpectedValue; // TODO: proper error
