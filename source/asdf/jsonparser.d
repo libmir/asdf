@@ -24,6 +24,9 @@ import std.meta;
 
 version(LDC)
 {
+    import ldc.attributes: optStrategy;
+    enum minsize = optStrategy("minsize");
+
     static if (__traits(targetHasFeature, "sse4.2"))
     {
         import core.simd;
@@ -36,6 +39,10 @@ version(LDC)
     {
         pragma(msg, "Info: SSE4.2 instructions are not used for ASDF.");
     }
+}
+else
+{
+    enum minsize;
 }
 
 version(X86_64)
@@ -63,9 +70,8 @@ Asdf parseJson(
     import std.format: format;
     import std.conv: ConvException;
     enum assumeValid = false;
-    enum zeroTerminated = false;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, zeroTerminated, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
+    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
     auto err = parser.parse;
     return Asdf(parser.result);
 }
@@ -76,7 +82,6 @@ unittest
     import std.range: chunks;
     auto text = cast(const ubyte[])`true `;
     auto ch = text.chunks(3);
-    import std.stdio;
     assert(ch.parseJson(32).data == [1]);
 }
 
@@ -93,12 +98,11 @@ Asdf parseJson(
     Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
     Flag!"spaces" spaces = Yes.spaces, 
     Flag!"assumeValid" assumeValid = No.assumeValid,
-    Flag!"zeroTerminated" zeroTerminated = No.zeroTerminated,
     Allocator,
     )
     (in char[] str, Allocator allocator)
 {
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, zeroTerminated, Allocator, const(char)[])(allocator, str);
+    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
     parser.parse();
     return Asdf(parser.result);
 }
@@ -108,13 +112,12 @@ Asdf parseJson(
     Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
     Flag!"spaces" spaces = Yes.spaces, 
     Flag!"assumeValid" assumeValid = No.assumeValid,
-    Flag!"zeroTerminated" zeroTerminated = No.zeroTerminated,
     )
     (in char[] str)
 {
     import std.experimental.allocator;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, zeroTerminated, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
+    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
     parser.parse();
     return Asdf(parser.result);
 }
@@ -141,7 +144,7 @@ auto parseJsonByLine(
     (Input input)
 {
     import std.experimental.allocator.gc_allocator;
-    alias Parser = JsonParserNew!(false, cast(bool)spaces, false, false, shared GCAllocator, Input);
+    alias Parser = JsonParserNew!(false, cast(bool)spaces, false, shared GCAllocator, Input);
     static struct ByLineValue
     {
         private Parser parser;
@@ -161,7 +164,6 @@ auto parseJsonByLine(
             if(!error)
             {
                 auto t = parser.skipSpaces_;
-                import std.stdio;
                 if(t != '\n' && t != 0)
                 {
                     error = AsdfErrorCode.unexpectedValue;
@@ -277,6 +279,30 @@ private __gshared immutable ubyte[256] parseFlags = [
     1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
 ];
 
+private __gshared immutable byte[256] uniFlags = [
+ //  0  1  2  3  4  5  6  7    8  9  A  B  C  D  E  F
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 0
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 1
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 2
+     0, 1, 2, 3, 4, 5, 6, 7,   8, 9,-1,-1,-1,-1,-1,-1, // 3
+
+    -1,10,11,12,13,14,15,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 4
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 5
+    -1,10,11,12,13,14,15,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 6
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 7
+
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+];
+
+
 pragma(inline, true)
 bool isPlainJsonCharacter()(size_t c)
 {
@@ -301,7 +327,109 @@ bool isJsonNumber()(size_t c)
     return (parseFlags[c] & 8) != 0;
 }
 
-package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeValid, bool zeroTerminated, Allocator, Input = const(ubyte)[])
+/+
+Fast picewise stack
++/
+private struct Stack(Allocator)
+{
+    @disable this(this);
+
+    struct Node
+    {
+        enum length = 32; // 2 power
+        Node* prev;
+        size_t* buff;
+    }
+
+    size_t[Node.length] buffer = void;
+    size_t length = 0;
+    Node node;
+
+    void push()(size_t value, ref Allocator allocator)
+    {
+        version(LDC) 
+            pragma(inline, true);
+        immutable local = length++ & (Node.length - 1);
+        if (local)
+        {
+            node.buff[local] = value;
+        }
+        else
+        if (length == 1)
+        {
+            node = Node(null, buffer.ptr);
+            buffer[0] = value;
+        }
+        else
+        {
+            auto prevNode = cast(Node*) allocator.allocate(Node.sizeof).ptr;
+            *prevNode = node;
+            node.prev = prevNode;
+            node.buff = cast(size_t*) allocator.allocate(Node.length * size_t.sizeof).ptr;
+            node.buff[0] = value;
+        }
+    }
+
+    size_t top()()
+    {
+        version(LDC) 
+            pragma(inline, true);
+        assert(length);
+        immutable local = (length - 1) & (Node.length - 1);
+        return node.buff[local];
+    }
+
+    size_t pop()(ref Allocator allocator)
+    {
+        version(LDC) 
+            pragma(inline, true);
+        assert(length);
+        immutable local = --length & (Node.length - 1);
+        immutable ret = node.buff[local];
+        if (local == 0)
+        {
+            if (node.buff != buffer.ptr)
+            {
+                allocator.deallocate(node.buff[0 .. Node.length]);
+                node = *node.prev;
+            }
+        }
+        return ret;
+    }
+
+    pragma(inline, false)
+    void free()(ref Allocator allocator)
+    {
+        if (node.buff is null)
+            return;
+        while(node.buff !is buffer.ptr)
+        {
+            allocator.deallocate(node.buff[0 .. Node.length]);
+            node = *node.prev;
+        }
+    }
+}
+
+unittest
+{
+    import std.experimental.allocator.mallocator;
+    Stack!(shared Mallocator) stack;
+    assert(stack.length == 0);
+    foreach(i; 1 .. 100)
+    {
+        stack.push(i, Mallocator.instance);
+        assert(stack.length == i);
+        assert(stack.top() == i);
+    }
+    foreach_reverse(i; 1 .. 100)
+    {
+        assert(stack.length == i);
+        assert(stack.pop(Mallocator.instance) == i);
+    }
+    assert(stack.length == 0);
+}
+
+package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
 {
 
     ubyte[] data;
@@ -336,22 +464,17 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
     bool prepareInput_()()
     {
-        static if (zeroTerminated && !chunked)
-            return true;
-        else
+        static if (chunked)
         {
-            static if (chunked)
+            if (front.length == 0)
             {
-                if (front.length == 0)
-                {
-                    if (input.empty)
-                        return false;
-                    front = cast(typeof(front)) input.front;
-                    input.popFront;
-                }
+                if (input.empty)
+                    return false;
+                front = cast(typeof(front)) input.front;
+                input.popFront;
             }
-            return front.length != 0;
         }
+        return front.length != 0;
     }
 
     void skipNewLine()()
@@ -410,20 +533,20 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 '\"', '\"',
                 '\\', '\\',
                 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+            enum byte16 num2E = ['+', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', '\0'];
             byte16 str2 = str2E;
+            byte16 num2 = num2E;
         }
 
         const(ubyte)* strPtr;
         const(ubyte)* strEnd;
         ubyte* dataPtr;
         ubyte* stringAndNumberShift = void;
-        import std.stdio;
         static if (chunked)
         {
+            pragma(inline, false)
             bool prepareInput()()
             {
-                if (_expect(strEnd == strPtr, false))
-                {
                     if (input.empty)
                     {
                         return false;
@@ -445,123 +568,88 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                         dataPtr = data.ptr + dataLength;
                         stringAndNumberShift = dataPtr + valueLength;
                     }
-                }
                 return true;
             }
             strPtr = front.ptr;
             strEnd = front.ptr + front.length;
-            prepareInput;
         }
         else
         {
             strPtr = cast(const(ubyte)*) input.ptr;
             strEnd = cast(const(ubyte)*) input.ptr + input.length;
-            static if (zeroTerminated)
-            {
-                enum prepareInput = false;
-            }
-            else
-            {
-                bool prepareInput()() { return strEnd != strPtr; }
-            }
+            enum bool prepareInput = false;
         }
         data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
-        // data[] = 0;
         dataPtr = data.ptr;
 
-        static if (hasSpaces)
+        pragma(inline, true)
         bool skipSpaces()()
         {
-            for(;;)
+            static if (includingNewLine)
+                alias isWhite = isJsonWhitespace;
+            else
+                alias isWhite = isJsonLineWhitespace;
+            F:
             {
-                if (prepareInput == false)
+                if (_expect(strEnd != strPtr, true))
                 {
+                L:
+                    if (isWhite(strPtr[0]))
+                    {
+                        strPtr++;
+                            goto F;
+                    }
+                    return true;
+                }
+                else
+                {
+                    if (prepareInput)
+                        goto L;
                     return false;
                 }
-                static if (includingNewLine)
-                    alias isWhite = isJsonWhitespace;
-                else
-                    alias isWhite = isJsonLineWhitespace;
-                if (isWhite(strPtr[0]))
-                {
-                    strPtr++;
-                    continue;
-                }
-                return true;
             }
-        }
-        else alias skipSpaces = prepareInput;
 
-        int readUnicode(out dchar d)
+        }
+
+        pragma(inline, true)
+        @minsize
+        int readUnicode()(ref dchar d)
         {
-            d = '\0';
-            foreach(i; 0..4)
+            uint e = 0;
+            size_t i = 4;
+            do
             {
-                if (!prepareInput)
+                if (strEnd == strPtr && !prepareInput)
                     return 1;
-                uint c = strPtr[0];
-                switch(c)
-                {
-                    case '0': .. case '9':
-                        c = c - '0';
-                        break;
-                    case 'a': .. case 'f':
-                        c = c - 'a' + 10;
-                        break;
-                    case 'A': .. case 'F':
-                        c = c - 'A' + 10;
-                        break;
-                    default:
-                        return -1;
-                }
-                strPtr += 1;
-                d <<= 4;
-                d ^= c;
+                int c = uniFlags[*strPtr++];
+                assert(c < 16);
+                if (c == -1)
+                    return -1;
+                assert(c >= 0);
+                e <<= 4;
+                e ^= c;
             }
+            while(--i);
+            d = e;
             return 0;
         }
 
-        int writeUnicode()
-        {
-            dchar d;
-            if (auto r = (readUnicode(d)))
-                return r;
-            if (_expect(0xD800 <= d && d <= 0xDFFF, false))
-            {
-                if (d >= 0xDC00)
-                    return -1;
-                if (!prepareInput)
-                    return 1;
-                if (*strPtr++ != '\\')
-                    return -1;
-                if (!prepareInput)
-                    return 1;
-                if (*strPtr++ != 'u')
-                    return -1;
-                d = (d & 0x3FF) << 10;
-                dchar trailing;
-                if (auto r = (readUnicode(trailing)))
-                    return r;
-                if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
-                    return -1;
-                d |= trailing & 0x3FF;
-                d += 0x10000;
-            }
-            if (0xFDD0 <= d && d <= 0xFDEF)
-                return -1; // TODO: review
-            if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
-                return -1; // TODO: review 
-            encodeUTF8(d, dataPtr);
-            return 0;
-        }
-    
-        size_t[32] stack = void;
-        size_t stackIndex = 0;
+        Stack!Allocator stack;
 
         typeof(return) retCode;
         bool currIsKey = void;
         size_t stackValue = void;
         goto value;
+
+/////////// RETURN
+    ret:
+        front = front[cast(typeof(front.ptr)) strPtr - front.ptr .. $];
+        dataLength = dataPtr - data.ptr;
+        assert(stack.length == 0);
+    ret_final:
+        return retCode;
+///////////
+
         switch (state)
         {
         default: assert(0);
@@ -577,27 +665,27 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             dataPtr += 1;
             goto string;
 
-        first_object_element:
-            if (!skipSpaces)
-                goto vValue_unexpectedEnd; // TODO
-            if (*strPtr != '}')
-                goto key_start;
-            strPtr++;
-            goto structure_end;
-        first_array_element:
-            if (!skipSpaces)
-                goto vValue_unexpectedEnd; // TODO
-            if (*strPtr != ']')
-                goto value_start;
-            strPtr++;
-            goto structure_end;
+        // first_object_element:
+        //     if (!skipSpaces)
+        //         goto vValue_unexpectedEnd; // TODO
+        //     if (*strPtr != '}')
+        //         goto key_start;
+        //     strPtr++;
+        //    goto structure_end;
+        // first_array_element:
+        //     if (!skipSpaces)
+        //         goto vValue_unexpectedEnd; // TODO
+        //     if (*strPtr != ']')
+        //         goto value_start;
+        //     strPtr++;
+        //     goto structure_end;
         next:
-            if (stackIndex == 0)
+            if (stack.length == 0)
                 goto ret;
             {
                 if (!skipSpaces)
                     goto vArray_unexpectedEnd; // TODO: proper error
-                stackValue = stack[stackIndex - 1];
+                stackValue = stack.top;
                 const isObject = stackValue & 1;
                 auto v = *strPtr++;
                 if (isObject)
@@ -616,7 +704,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 }
             }
         structure_end: {
-            stackValue = stack[--stackIndex];
+            stackValue = stack.pop(*allocator);
             const structureShift = stackValue >> 1;
             const structureLengthPtr = data.ptr + structureShift;
             const size_t structureLength = dataPtr - structureLengthPtr - 4;
@@ -654,9 +742,22 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 *dataPtr++ = *strPtr++;
                 for(;;)
                 {
-                    if (!prepareInput)
+                    if (strEnd == strPtr && !prepareInput)
                         goto number_found;
-                    while(zeroTerminated || strEnd >= strPtr + 4)
+                    version(SSE42)
+                    {
+                        while (strEnd >= strPtr + 16)
+                        {
+                            byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                            size_t ecx = __builtin_ia32_pcmpistri128(num2, str1, 0x10);
+                            storeUnaligned!ubyte16(str1, dataPtr);
+                            strPtr += ecx;
+                            dataPtr += ecx;
+                            if(ecx != 16)
+                                goto number_found;
+                        }
+                    }
+                    while(strEnd >= strPtr + 4)
                     {
                         char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto number_found0;
                         char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isJsonNumber(c1)) goto number_found1;
@@ -664,14 +765,11 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                         char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isJsonNumber(c3)) goto number_found3;
                         strPtr += 4;         dataPtr[-1] = c3;
                     }
-                    static if (!zeroTerminated)
+                    while(strEnd > strPtr)
                     {
-                        while(strEnd > strPtr)
-                        {
-                            char c0 = strPtr[0]; if (!isJsonNumber(c0)) goto number_found; dataPtr[0] = c0;
-                            strPtr += 1;
-                            dataPtr += 1;
-                        }
+                        char c0 = strPtr[0]; if (!isJsonNumber(c0)) goto number_found; dataPtr[0] = c0;
+                        strPtr += 1;
+                        dataPtr += 1;
                     }
                 }
             number_found3: dataPtr++; strPtr++;
@@ -689,16 +787,25 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             case '{':
                 strPtr++;
                 *dataPtr++ = Asdf.Kind.object;
-                stack[stackIndex++] = ((dataPtr - data.ptr) << 1) ^ 1;
+                stack.push(((dataPtr - data.ptr) << 1) ^ 1, *allocator);
                 dataPtr += 4;
-                goto first_object_element;
+                if (!skipSpaces)
+                    goto vValue_unexpectedEnd; // TODO
+                if (*strPtr != '}')
+                    goto key_start;
+                strPtr++;
+                goto structure_end;
             case '[':
                 strPtr++;
                 *dataPtr++ = Asdf.Kind.array;
-                stack[stackIndex++] = ((dataPtr - data.ptr) << 1) ^ 0;
+                stack.push(((dataPtr - data.ptr) << 1) ^ 0, *allocator);
                 dataPtr += 4;
-                goto first_array_element;
-            import std.stdio;
+                if (!skipSpaces)
+                    goto vValue_unexpectedEnd; // TODO
+                if (*strPtr != ']')
+                    goto value_start;
+                strPtr++;
+                goto structure_end;
             foreach (name; AliasSeq!("false", "null", "true"))
             {
             case name[0]:
@@ -706,15 +813,15 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                     {
                         static if (!assumeValid)
                         {
-                            char[name.length - 1] c = void;
-                            import std.range: iota;
-                            foreach (i; aliasSeqOf!(iota(1, name.length)))
-                                c[i - 1] = strPtr[i];
-                            foreach (i; aliasSeqOf!(iota(1, name.length)))
+                            version(X86_Any)
                             {
-                                if (c[i - 1] != name[i])
+                                enum uint referenceValue =
+                                        (uint(name[$ - 4]) << 0x00) ^ 
+                                        (uint(name[$ - 3]) << 0x08) ^ 
+                                        (uint(name[$ - 2]) << 0x10) ^ 
+                                        (uint(name[$ - 1]) << 0x18);
+                                if (*cast(uint*)(strPtr + bool(name.length == 5)) != referenceValue)
                                 {
-                                    
                                     static if (name == "true")
                                         goto vTrue_unexpectedValue;
                                     else
@@ -722,6 +829,27 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                                         goto vFalse_unexpectedValue;
                                     else
                                         goto vNull_unexpectedValue;
+                                }
+                            }
+                            else
+                            {
+                                char[name.length - 1] c = void;
+                                import std.range: iota;
+                                foreach (i; aliasSeqOf!(iota(1, name.length)))
+                                    c[i - 1] = strPtr[i];
+                                foreach (i; aliasSeqOf!(iota(1, name.length)))
+                                {
+                                    if (c[i - 1] != name[i])
+                                    {
+                                        
+                                        static if (name == "true")
+                                            goto vTrue_unexpectedValue;
+                                        else
+                                        static if (name == "false")
+                                            goto vFalse_unexpectedValue;
+                                        else
+                                            goto vNull_unexpectedValue;
+                                    }
                                 }
                             }
                         }
@@ -740,8 +868,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                         strPtr += 1;
                         foreach (i; 1 .. name.length)
                         {
-                            import std.stdio;
-                            if (prepareInput == false)
+                            if (strEnd == strPtr && !prepareInput)
                             {
                                 static if (name == "true")
                                     goto vTrue_unexpectedEnd;
@@ -792,139 +919,146 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             assert(*strPtr == '"');
             strPtr += 1;
 
-            // version(SSE42)
-            // {
-            // }
-            // else
+        StringLoop: {
+            for(;;)
             {
-            StringLoop:
-
-                for(;;)
+                if (strEnd == strPtr && !prepareInput)
+                    goto vString_unexpectedEnd;
+                version(SSE42)
                 {
-                    if (!prepareInput)
-                        goto vString_unexpectedEnd;
-                    version(SSE42)
+                    while (strEnd >= strPtr + 16)
                     {
-                        import std.stdio;
-                        while (strEnd >= strPtr + 16)
-                        {
-                            writeln("####");
-                            stdout.flush;
-                            writeln(cast(string)strPtr[0 .. 16]);
-                            writeln("####2");
-                            stdout.flush;
-                            byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)*strPtr);
-                            writeln("####3");
-                            writeln("####3");
-                            writeln("####3");
-                            writeln("####3");
-                            stdout.flush;
-                            size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
-                            writeln(ecx);
-                            stdout.flush;
-                            storeUnaligned!ubyte16(str1, dataPtr);
-                            strPtr += ecx;
-                            dataPtr += ecx;
-
-                            if(ecx == 16)
-                                goto string_found;
-                        }
-                    }
-                    if (!prepareInput)
-                        goto vString_unexpectedEnd;
-                    while(zeroTerminated || strEnd >= strPtr + 4)
-                    {
-                        char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
-                        char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
-                        char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
-                        char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
-                        strPtr += 4;         dataPtr[-1] = c3;
-                    }
-                    static if (!zeroTerminated)
-                    {
-                        while(strEnd > strPtr)
-                        {
-                            char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto string_found; dataPtr[0] = c0;
-                            strPtr += 1;
-                            dataPtr += 1;
-                        }
+                        byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                        size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
+                        storeUnaligned!ubyte16(str1, dataPtr);
+                        strPtr += ecx;
+                        dataPtr += ecx;
+                        if(ecx != 16)
+                            goto string_found;
                     }
                 }
-            string_found3: dataPtr++; strPtr++;
-            string_found2: dataPtr++; strPtr++;
-            string_found1: dataPtr++; strPtr++;
-            string_found0: dataPtr -= 4;
-            string_found:
-
-                uint c = strPtr[0];
-                if (c == '\"')
+                while(strEnd >= strPtr + 4)
                 {
-                    strPtr += 1;
-                    if (currIsKey)
-                    {
-                        auto stringLength = dataPtr - stringAndNumberShift - 1;
-                        if (stringLength > ubyte.max)
-                            goto vNull_unexpectedValue; // TODO: replace proper error
-                        *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
-                        if (!skipSpaces)
-                            goto vArray_unexpectedEnd; // TODO: proper error
-                        if (*strPtr != ':')
-                            goto vObject_unexpectedValue; // TODO: proper error
-                        strPtr++;
-                        goto value;
-                    }
-                    else
-                    {
-                        auto stringLength = dataPtr - stringAndNumberShift - 4;
-                        if (stringLength > uint.max)
-                            goto vNull_unexpectedValue; // TODO: replace proper error
-                        version(X86_Any)
-                            *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
-                        else
-                            static assert(0);
-                        goto next;
-                    }
+                    char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
+                    char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
+                    char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
+                    char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
+                    strPtr += 4;         dataPtr[-1] = c3;
                 }
-                if (c == '\\')
+                while(strEnd > strPtr)
                 {
+                    char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto string_found; dataPtr[0] = c0;
                     strPtr += 1;
-                    if (!prepareInput)
-                        goto vString_unexpectedEnd;
-                    c = strPtr[0];
-                    strPtr += 1;
-                    switch(c)
-                    {
-                        case '/' :           goto backSlashReplace;
-                        case '\"':           goto backSlashReplace;
-                        case '\\':           goto backSlashReplace;
-                        case 'b' : c = '\b'; goto backSlashReplace;
-                        case 'f' : c = '\f'; goto backSlashReplace;
-                        case 'n' : c = '\n'; goto backSlashReplace;
-                        case 'r' : c = '\r'; goto backSlashReplace;
-                        case 't' : c = '\t'; goto backSlashReplace;
-                        backSlashReplace:
-                            *dataPtr++ = cast(ubyte) c;
-                            goto StringLoop;
-                        case 'u' :
-                            auto wur = writeUnicode();
-                            if (wur == 0)
-                                goto StringLoop;
-                            if (wur == 1)
-                                goto vString_unexpectedEnd;
-                            assert (wur == -1);
-                            goto vString_unexpectedValue;
-                        default: goto vString_unexpectedValue;
-                    }
+                    dataPtr += 1;
                 }
-                goto vString_unexpectedValue;
             }
-        }
-        assert(0);
-    ret:
-        front = front[cast(typeof(front.ptr)) strPtr - front.ptr .. $];
+        string_found3: dataPtr++; strPtr++;
+        string_found2: dataPtr++; strPtr++;
+        string_found1: dataPtr++; strPtr++;
+        string_found0: dataPtr -= 4;
+        string_found:
+    
+            uint c = strPtr[0];
+            if (c == '\"')
+            {
+                strPtr += 1;
+                if (currIsKey)
+                {
+                    auto stringLength = dataPtr - stringAndNumberShift - 1;
+                    if (stringLength > ubyte.max)
+                        goto vNull_unexpectedValue; // TODO: replace proper error
+                    *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
+                    if (!skipSpaces)
+                        goto vArray_unexpectedEnd; // TODO: proper error
+                    if (*strPtr != ':')
+                        goto vObject_unexpectedValue; // TODO: proper error
+                    strPtr++;
+                    goto value;
+                }
+                else
+                {
+                    auto stringLength = dataPtr - stringAndNumberShift - 4;
+                    if (stringLength > uint.max)
+                        goto vNull_unexpectedValue; // TODO: replace proper error
+                    version(X86_Any)
+                        *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
+                    else
+                        static assert(0);
+                    goto next;
+                }
+            }
+            if (c == '\\')
+            {
+                strPtr += 1;
+                if (strEnd == strPtr && !prepareInput)
+                    goto vString_unexpectedEnd;
+                c = strPtr[0];
+                strPtr += 1;
+                switch(c)
+                {
+                    case '/' :           goto backSlashReplace;
+                    case '\"':           goto backSlashReplace;
+                    case '\\':           goto backSlashReplace;
+                    case 'b' : c = '\b'; goto backSlashReplace;
+                    case 'f' : c = '\f'; goto backSlashReplace;
+                    case 'n' : c = '\n'; goto backSlashReplace;
+                    case 'r' : c = '\r'; goto backSlashReplace;
+                    case 't' : c = '\t'; goto backSlashReplace;
+                    backSlashReplace:
+                        *dataPtr++ = cast(ubyte) c;
+                        goto StringLoop;
+                    case 'u' :
+                        uint wur = void;
+                        dchar d = void;
+                        if (auto r = (readUnicode(d)))
+                        {
+                            if (r == 1)
+                                goto vString_unexpectedEnd;
+                            goto vString_unexpectedValue;
+                        }
+                        if (_expect(0xD800 <= d && d <= 0xDFFF, false))
+                        {
+                            if (d >= 0xDC00)
+                                goto vString_unexpectedValue;
+                            if (strEnd == strPtr && !prepareInput)
+                                goto vString_unexpectedEnd;
+                            if (*strPtr++ != '\\')
+                                goto vString_unexpectedValue;
+                            if (strEnd == strPtr && !prepareInput)
+                                goto vString_unexpectedEnd;
+                            if (*strPtr++ != 'u')
+                                goto vString_unexpectedValue;
+                            d = (d & 0x3FF) << 10;
+                            dchar trailing;
+                            if (auto r = (readUnicode(trailing)))
+                            {
+                                if (r == 1)
+                                    goto vString_unexpectedEnd;
+                                goto vString_unexpectedValue;
+                            }
+                            if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
+                                goto vString_unexpectedValue;
+                            {
+                                d |= trailing & 0x3FF;
+                                d += 0x10000;
+                            }
+                        }
+                        if (0xFDD0 <= d && d <= 0xFDEF)
+                            goto vString_unexpectedEnd; // TODO: review
+                        if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
+                            goto vString_unexpectedEnd; // TODO: review 
+                        encodeUTF8(d, dataPtr);
+                        goto StringLoop;
+                    default: goto vString_unexpectedValue;
+                }
+            }
+            goto vString_unexpectedValue;
+        }}
+
     ret_error:
         dataLength = dataPtr - data.ptr;
-        return retCode;
+        stack.free(*allocator);
+        goto ret_final;
     unexpectedEnd: retCode = AsdfErrorCode.unexpectedEnd; goto ret_error;
     unexpectedValue: retCode = AsdfErrorCode.unexpectedValue; goto ret_error;
 
@@ -956,7 +1090,8 @@ unittest
     assert( str == str2);
 }
 
-void encodeUTF8(dchar c, ref ubyte* ptr)
+pragma(inline, true)
+void encodeUTF8()(dchar c, ref ubyte* ptr)
 {   
     if (c < 0x80)
     {
@@ -1007,7 +1142,6 @@ unittest
     static immutable str = `"1234567890qwertyuiopasdfghjklzxcvbnm"`;
     auto data = Asdf(str[1..$-1]);
     assert(data == parseJson(str));
-    import std.stdio;
     foreach(i; 1 .. str.length)
     {
         auto s  = parseJson(str.representation.chunks(i));
@@ -1015,7 +1149,6 @@ unittest
     }
 }
 
-    import std.stdio;
 unittest
 {
     import std.string;

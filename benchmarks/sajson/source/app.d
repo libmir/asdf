@@ -15,7 +15,7 @@ immutable files =
     "instruments.json",
     "mesh.json",
     "mesh.pretty.json",
-    //"nested.json",
+    "nested.json",
     "svg_menu.json",
     "truenull.json",
     "twitter.json",
@@ -43,7 +43,6 @@ void run_benchmark(string fileName)
             Yes.includingNewLine,
             Yes.spaces,
             No.assumeValid,
-            No.zeroTerminated,
         )(Mallocator.instance);
         sw.stop;
         Mallocator.instance.deallocate(json.data.ptr[0 .. text.length * 6]);
