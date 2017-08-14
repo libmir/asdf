@@ -27,7 +27,7 @@ version(LDC)
     static if (__traits(targetHasFeature, "sse4.2"))
     {
         import core.simd;
-        import asdf.simd;
+        import ldc.simd;
         import ldc.gccbuiltins_x86;
         pragma(msg, "Info: SSE4.2 instructions are used for ASDF.");
         version = SSE42;
@@ -403,6 +403,16 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     pragma(inline, false)
     AsdfErrorCode parse()
     {
+        version(SSE42)
+        {
+            enum byte16 str2E = [
+                '\u0001', '\u001F',
+                '\"', '\"',
+                '\\', '\\',
+                '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+            byte16 str2 = str2E;
+        }
+
         const(ubyte)* strPtr;
         const(ubyte)* strEnd;
         ubyte* dataPtr;
@@ -788,11 +798,40 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             // else
             {
             StringLoop:
+
                 for(;;)
                 {
                     if (!prepareInput)
                         goto vString_unexpectedEnd;
+                    version(SSE42)
+                    {
+                        import std.stdio;
+                        while (strEnd >= strPtr + 16)
+                        {
+                            writeln("####");
+                            stdout.flush;
+                            writeln(cast(string)strPtr[0 .. 16]);
+                            writeln("####2");
+                            stdout.flush;
+                            byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)*strPtr);
+                            writeln("####3");
+                            writeln("####3");
+                            writeln("####3");
+                            writeln("####3");
+                            stdout.flush;
+                            size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
+                            writeln(ecx);
+                            stdout.flush;
+                            storeUnaligned!ubyte16(str1, dataPtr);
+                            strPtr += ecx;
+                            dataPtr += ecx;
 
+                            if(ecx == 16)
+                                goto string_found;
+                        }
+                    }
+                    if (!prepareInput)
+                        goto vString_unexpectedEnd;
                     while(zeroTerminated || strEnd >= strPtr + 4)
                     {
                         char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
