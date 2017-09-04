@@ -4,6 +4,7 @@
 [![codecov.io](https://codecov.io/github/tamediadigital/asdf/coverage.svg?branch=master)](https://codecov.io/github/tamediadigital/asdf?branch=master)
 [![Build Status](https://travis-ci.org/tamediadigital/asdf.svg?branch=master)](https://travis-ci.org/tamediadigital/asdf)
 [![Circle CI Docs](https://circleci.com/gh/tamediadigital/asdf.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/tamediadigital/asdf)
+[![Build status](https://ci.appveyor.com/api/projects/status/6o7707y5bk4vxn29?svg=true)](https://ci.appveyor.com/project/yannick/asdf)
 
 # A Simple Document Format
 
