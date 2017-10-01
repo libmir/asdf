@@ -12,6 +12,6 @@
 		"unittest-cov-sse42": {
 			"buildOptions": ["unittests", "coverage", "debugMode", "debugInfo"],
 			"dflags-ldc": ["-mattr=+sse4.2"]
-		},
+		}
 	}
 }

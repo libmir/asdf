@@ -1,7 +1,7 @@
 /++
 Json Parser
 
-Copyright: Tamedia Digital, 2016
+Copyright: Tamedia Digital, 2016-2017
 
 Authors: Ilya Yaroshenko
 
@@ -15,969 +15,1212 @@ T4=$(TR $(TDNW $(LREF $1)) $(TD $2) $(TD $3) $(TD $4))
 +/
 module asdf.jsonparser;
 
-import std.range.primitives;	
+import std.range.primitives;
 import std.typecons;
 import asdf.asdf;
 import asdf.outputarray;
+import std.meta;
 
 
 version(LDC)
 {
-	static if (__traits(targetHasFeature, "sse4.2"))
-	{
-		import core.simd;
-		import asdf.simd;
-		import ldc.gccbuiltins_x86;
-		pragma(msg, "Info: SSE4.2 instructions are used for ASDF.");
-		version = SSE42;
-	}
-	else
-	{
-		pragma(msg, "Info: SSE4.2 instructions are not used for ASDF.");
-	}
+    import ldc.attributes: optStrategy;
+    enum minsize = optStrategy("minsize");
+
+    static if (__traits(targetHasFeature, "sse4.2"))
+    {
+        import core.simd;
+        import ldc.simd;
+        import ldc.gccbuiltins_x86;
+        pragma(msg, "Info: SSE4.2 instructions are used for ASDF.");
+        version = SSE42;
+    }
+    else
+    {
+        pragma(msg, "Info: SSE4.2 instructions are not used for ASDF.");
+    }
 }
+else
+{
+    enum minsize;
+}
+
+version(X86_64)
+    version = X86_Any;
+else
+version(X86)
+    version = X86_Any;
 
 /++
 Parses json value
 Params:
-	chunks = input range composed of elements type of `const(ubyte)[]`.
-		`chunks` can use the same buffer for each chunk.
-	initLength = initial output buffer length. Minimal value equals 32.
+    chunks = input range composed of elements type of `const(ubyte)[]`.
+        `chunks` can use the same buffer for each chunk.
+    initLength = initial output buffer length. Minimal value equals 32.
 Returns:
-	ASDF value
-+/
-Asdf parseJson(Flag!"includingNewLine" includingNewLine = Yes.includingNewLine, Flag!"spaces" spaces = Yes.spaces, Chunks)(Chunks chunks, size_t initLength = 32)
-	if(is(ElementType!Chunks : const(ubyte)[]))
-{
-	return parseJson!(includingNewLine, spaces, Chunks)(chunks, chunks.front, initLength);
-}
-
-///
-unittest
-{
-	import std.range: chunks;
-	auto text = cast(const ubyte[])`true`;
-	assert(text.chunks(3).parseJson(32).data == [1]);
-}
-
-/++
-Params:
-	chunks = input range composed of elements type of `const(ubyte)[]`.
-		`chunks` can use the same buffer for each chunk.
-	front = current front element of `chunks` or its part
-	initLength = initial output buffer length. Minimal value equals 32.
-Returns:
-	ASDF value
+    ASDF value
 +/
 Asdf parseJson(
-	Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
-	Flag!"spaces" spaces = Yes.spaces,
-	Chunks)
-	(Chunks chunks, const(ubyte)[] front, size_t initLength = 32)
-	if(is(ElementType!Chunks : const(ubyte)[]))
+    Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
+    Flag!"spaces" spaces = Yes.spaces,
+    Chunks)
+    (Chunks chunks, size_t initLength = 32)
+    if(is(ElementType!Chunks : const(ubyte)[]))
 {
-	import std.format: format;
-	import std.conv: ConvException;
-	auto c = JsonParser!(includingNewLine, spaces, Chunks)(front, chunks, OutputArray(initLength));
-	auto r = c.readValue;
-	if(r == 0)
-		throw new ConvException("Unexpected end of input");
-	if(r < 0)
-		throw new ConvException("Unexpected character \\x%02X : %s".format(-r, cast(char)-r));
-	return c.oa.result;
+    import std.format: format;
+    import std.conv: ConvException;
+    enum assumeValid = false;
+    import std.experimental.allocator.gc_allocator;
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
+    if (parser.parse)
+        throw new Exception(parser.lastError);
+    return Asdf(parser.result);
 }
 
 ///
 unittest
 {
-	import std.range: chunks;
-	auto text = cast(const ubyte[])`true `;
-	auto ch = text.chunks(3);
-	assert(ch.parseJson(ch.front, 32).data == [1]);
+    import std.range: chunks;
+    auto text = cast(const ubyte[])`true `;
+    auto ch = text.chunks(3);
+    assert(ch.parseJson(32).data == [1]);
 }
+
 
 /++
 Parses json value
 Params:
-	str = input string
-	initLength = initial output buffer length. Minimal value equals 32.
+    str = input string
+    initLength = initial output buffer length. Minimal value equals 32.
 Returns:
-	ASDF value
+    ASDF value
 +/
 Asdf parseJson(
-	Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
-	Flag!"spaces" spaces = Yes.spaces)
-	(in char[] str, size_t initLength = 32)
+    Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
+    Flag!"spaces" spaces = Yes.spaces, 
+    Flag!"assumeValid" assumeValid = No.assumeValid,
+    Allocator,
+    )
+    (in char[] str, Allocator allocator)
 {
-	import std.range: only;
-	return parseJson!(includingNewLine, spaces)(only(cast(const ubyte[])str), cast(const ubyte[])str, initLength);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
+    if (parser.parse)
+        throw new Exception(parser.lastError);
+    return Asdf(parser.result);
+}
+
+/// ditto
+Asdf parseJson(
+    Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
+    Flag!"spaces" spaces = Yes.spaces, 
+    Flag!"assumeValid" assumeValid = No.assumeValid,
+    )
+    (in char[] str)
+{
+    import std.experimental.allocator;
+    import std.experimental.allocator.gc_allocator;
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
+    if (parser.parse)
+        throw new Exception(parser.lastError);
+    return Asdf(parser.result);
 }
 
 ///
 unittest
 {
-	assert(`{"ak": {"sub": "subval"} }`.parseJson["ak", "sub"] == "subval");
+    assert(`{"ak": {"sub": "subval"} }`.parseJson["ak", "sub"] == "subval");
 }
 
 /++
 Parses JSON value in each line from a Range of buffers.
 Note: Invalid lines generate an empty ASDF value.
 Params:
-	chunks = input range composed of elements type of `const(ubyte)[]`.
-		`chunks` can use the same buffer for each chunk.
-	initLength = initial output buffer length. Minimal value equals 32.
+    chunks = input range composed of elements type of `const(ubyte)[]` or string / const(char)[].
+        `chunks` can use the same buffer for each chunk.
+    initLength = initial output buffer length. Minimal value equals 32.
 Returns:
-	Input range composed of ASDF values. Each value uses the same internal buffer.
+    Input range composed of ASDF values. Each value uses the same internal buffer.
 +/
 auto parseJsonByLine(
-	Flag!"spaces" spaces = Yes.spaces,
-	Chunks)
-	(Chunks chunks, size_t initLength = 32)
+    Flag!"spaces" spaces = Yes.spaces,
+    Input)
+    (Input input)
 {
-	static struct ByLineValue
-	{
-		private JsonParser!(false, spaces, Chunks) asdf;
-		private bool _empty, _nextEmpty;
+    import std.experimental.allocator.gc_allocator;
+    alias Parser = JsonParser!(false, cast(bool)spaces, false, shared GCAllocator, Input);
+    static struct ByLineValue
+    {
+        Parser parser;
+        private bool _empty, _nextEmpty;
 
-		void popFront()
-		{
-			assert(!empty);
-			if(_nextEmpty)
-			{
-				_empty = true;
-				return;
-			}
-			asdf.oa.shift = 0;
-			auto length = asdf.readValue;
-			if(length > 0)
-			{
-				auto t = asdf.skipSpaces;
-				if(t != '\n' && t != 0)
-					length = -t;
-				else if(t == 0)
-				{
-					_nextEmpty = true;
-					return;
-				}
-			}
-			if(length <= 0)
-			{
-				length = -length;
-				asdf.oa.shift = 0;
-				while(length != '\n' && length != 0)
-				{
-					length = asdf.pop;
-				}
-			}
-			_nextEmpty = length ? !asdf.setFrontRange : 0;
-		}
+        void popFront()
+        {
+            assert(!empty);
+            if(_nextEmpty)
+            {
+                _empty = true;
+                return;
+            }
+            // parser.oa.shift = 0;
+            parser.dataLength = 0;
+            auto error = parser.parse;
+            if(!error)
+            {
+                auto t = parser.skipSpaces_;
+                if(t != '\n' && t != 0)
+                {
+                    error = AsdfErrorCode.unexpectedValue;
+                    parser._lastError = "expected new line or end of input";
+                }
+                else
+                if(t == 0)
+                {
+                    _nextEmpty = true;
+                    return;
+                }
+                else
+                {
+                    parser.skipNewLine;
+                    _nextEmpty = false;
+                    return;
+                }
+            }
+            if (error)
+                throw new Exception(parser.lastError);
+            parser.skipLine;
+            _nextEmpty = parser.prepareInput_;
+        }
 
-		auto front() @property
-		{
-			assert(!empty);
-			return asdf.oa.result;
-		}
+        auto front() @property
+        {
+            assert(!empty);
+            return Asdf(parser.result);
+        }
 
-		bool empty()
-		{
-			return _empty;
-		}
-	}
-	ByLineValue ret; 
-	if(chunks.empty)
-	{
-		ret._empty = ret._nextEmpty = true;
-	}
-	else
-	{
-		ret = ByLineValue(JsonParser!(false, spaces, Chunks)(chunks.front, chunks, OutputArray(initLength)));
-		ret.popFront;
-	}
-	return ret;
+        bool empty()
+        {
+            return _empty;
+        }
+    }
+    ByLineValue ret; 
+    if(input.empty)
+    {
+        ret._empty = ret._nextEmpty = true;
+    }
+    else
+    {
+        ret = ByLineValue(Parser(GCAllocator.instance, input));
+        ret.popFront;
+    }
+    return ret;
 }
 
 ///
 unittest
 {
-	import asdf.jsonparser;
-	import std.range: chunks;
-	auto text = cast(const ubyte[])"\t true \r\r\n false\t";
-	auto values = text.chunks(3).parseJsonByLine(32);
-	assert(values.front.data == [1]);
-	values.popFront;
-	assert(values.front.data == [2]);
-	values.popFront;
-	assert(values.empty);
+    import asdf.jsonparser;
+    import std.range: chunks;
+    auto text = cast(const ubyte[])"\t true \r\r\n false\t";
+    auto values = text.chunks(3).parseJsonByLine;
+    assert(values.front.data == [1]);
+    values.popFront;
+    assert(values.front.data == [2]);
+    values.popFront;
+    assert(values.empty);
 }
 
-/++
-Parses JSON value in each line within a string.
-Note: most probably you do not want this but operate directly on a buffer!
-Note: Invalid lines generate an empty ASDF value.
-Params:
-	text = string or const(char)[]
-	initLength = initial output buffer length. Minimal value equals 32.
-Returns:
-	Input range composed of ASDF values. Each value uses the same internal buffer.
+///
+unittest
+{
+    import std.conv;
+    import std.algorithm : map;
+    import std.range : array;
+    string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" ~ `{"key2": "b"}`;
+    auto values = text.parseJsonByLine();
+    assert( values.front["key"] == "a");
+    values.popFront;
+    assert( values.front["key2"] == "b");
+    values.popFront;
+}
+
+version(LDC)
+{
+    public import ldc.intrinsics: _expect = llvm_expect;
+}
+else
+{
+    T _expect(T)(T val, T expected_val) if (__traits(isIntegral, T))
+    {
+        return val;
+    }
+}
+
+enum AsdfErrorCode
+{
+    success,
+    unexpectedEnd,
+    unexpectedValue,
+}
+
+private __gshared immutable ubyte[256] parseFlags = [
+ // 0 1 2 3 4 5 6 7   8 9 A B C D E F
+    0,0,0,0,0,0,0,0,  0,6,2,0,0,6,0,0, // 0
+    0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0, // 1
+    7,1,0,1,1,1,1,1,  1,1,1,9,1,9,9,1, // 2
+    9,9,9,9,9,9,9,9,  9,9,1,1,1,1,1,1, // 3
+
+    1,1,1,1,1,9,1,1,  1,1,1,1,1,1,1,1, // 4
+    1,1,1,1,1,1,1,1,  1,1,1,1,0,1,1,1, // 5
+    1,1,1,1,1,9,1,1,  1,1,1,1,1,1,1,1, // 6
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1, // 7
+
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,  1,1,1,1,1,1,1,1,
+];
+
+private __gshared immutable byte[256] uniFlags = [
+ //  0  1  2  3  4  5  6  7    8  9  A  B  C  D  E  F
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 0
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 1
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 2
+     0, 1, 2, 3, 4, 5, 6, 7,   8, 9,-1,-1,-1,-1,-1,-1, // 3
+
+    -1,10,11,12,13,14,15,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 4
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 5
+    -1,10,11,12,13,14,15,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 6
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1, // 7
+
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,  -1,-1,-1,-1,-1,-1,-1,-1,
+];
+
+
+pragma(inline, true)
+bool isPlainJsonCharacter()(size_t c)
+{
+    return (parseFlags[c] & 1) != 0;
+}
+
+pragma(inline, true)
+bool isJsonWhitespace()(size_t c)
+{
+    return (parseFlags[c] & 2) != 0;
+}
+
+pragma(inline, true)
+bool isJsonLineWhitespace()(size_t c)
+{
+    return (parseFlags[c] & 4) != 0;
+}
+
+pragma(inline, true)
+bool isJsonNumber()(size_t c)
+{
+    return (parseFlags[c] & 8) != 0;
+}
+
+/+
+Fast picewise stack
 +/
-auto parseJsonByLine(
-	Flag!"spaces" spaces = Yes.spaces, size_t initLength = 32)
-	(in const(char)[] text)
+private struct Stack(Allocator)
 {
-	import std.range: only;
-	return (cast(const(ubyte[]))text).only.parseJsonByLine!spaces(initLength);
+    @disable this(this);
+
+    struct Node
+    {
+        enum length = 32; // 2 power
+        Node* prev;
+        size_t* buff;
+    }
+
+    size_t[Node.length] buffer = void;
+    size_t length = 0;
+    Node node;
+
+    void push()(size_t value, ref Allocator allocator)
+    {
+        version(LDC) 
+            pragma(inline, true);
+        immutable local = length++ & (Node.length - 1);
+        if (local)
+        {
+            node.buff[local] = value;
+        }
+        else
+        if (length == 1)
+        {
+            node = Node(null, buffer.ptr);
+            buffer[0] = value;
+        }
+        else
+        {
+            auto prevNode = cast(Node*) allocator.allocate(Node.sizeof).ptr;
+            *prevNode = node;
+            node.prev = prevNode;
+            node.buff = cast(size_t*) allocator.allocate(Node.length * size_t.sizeof).ptr;
+            node.buff[0] = value;
+        }
+    }
+
+    size_t top()()
+    {
+        version(LDC) 
+            pragma(inline, true);
+        assert(length);
+        immutable local = (length - 1) & (Node.length - 1);
+        return node.buff[local];
+    }
+
+    size_t pop()(ref Allocator allocator)
+    {
+        version(LDC) 
+            pragma(inline, true);
+        assert(length);
+        immutable local = --length & (Node.length - 1);
+        immutable ret = node.buff[local];
+        if (local == 0)
+        {
+            if (node.buff != buffer.ptr)
+            {
+                allocator.deallocate(node.buff[0 .. Node.length]);
+                node = *node.prev;
+            }
+        }
+        return ret;
+    }
+
+    pragma(inline, false)
+    void free()(ref Allocator allocator)
+    {
+        if (node.buff is null)
+            return;
+        while(node.buff !is buffer.ptr)
+        {
+            allocator.deallocate(node.buff[0 .. Node.length]);
+            node = *node.prev;
+        }
+    }
 }
 
 unittest
 {
-	import std.conv;
-	import std.algorithm : map;
-	import std.range : array;
-	string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" ~ `{"key2": "b"}`;
-	auto values = text.parseJsonByLine();
-	assert( values.front["key"] == "a");
-	values.popFront;
-	assert( values.front["key2"] == "b");
-	values.popFront;
+    import std.experimental.allocator.mallocator;
+    Stack!(shared Mallocator) stack;
+    assert(stack.length == 0);
+    foreach(i; 1 .. 100)
+    {
+        stack.push(i, Mallocator.instance);
+        assert(stack.length == i);
+        assert(stack.top() == i);
+    }
+    foreach_reverse(i; 1 .. 100)
+    {
+        assert(stack.length == i);
+        assert(stack.pop(Mallocator.instance) == i);
+    }
+    assert(stack.length == 0);
 }
 
-package struct JsonParser(bool includingNewLine, bool spaces, Chunks)
+///
+struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
 {
-	const(ubyte)[] r;
-	Chunks chunks;
-	OutputArray oa;
 
-	/++
-	Update the front array ``r` if it is empty.
-	Return `false` on unexpected end of input.
-	+/
-	bool setFrontRange()
-	{
-		if(r.length == 0)
-		{
-			assert(!chunks.empty);
-			chunks.popFront;
-			if(chunks.empty)
-			{
-				return false;  // unexpected end of input
-			}
-			r = chunks.front;
-		}
-		return true;
-	}
+    ubyte[] data;
+    Allocator* allocator;
+    Input input;
+    static if (chunked)
+        ubyte[] front;
+    else
+        alias front = input;
+    size_t dataLength;
 
-	int front()
-	{
-		return setFrontRange ? r[0] : 0;
-	}
+    string _lastError;
 
-	void popFront()
-	{
-		r = r[1 .. $];
-	}
+    enum bool chunked = !is(Input : const(char)[]);
 
+    this(ref Allocator allocator, Input input)
+    {
+        this.input = input;
+        this.allocator = &allocator;
+    }
 
-	int pop()
-	{
-		if(setFrontRange)
-		{
-			int ret = r[0];
-			r = r[1 .. $];
-			return ret;
-		}
-		else
-		{
-			return 0;
-		}
-	}
+    bool prepareInput_()()
+    {
+        static if (chunked)
+        {
+            if (front.length == 0)
+            {
+                if (input.empty)
+                    return false;
+                front = cast(typeof(front)) input.front;
+                input.popFront;
+            }
+        }
+        return front.length != 0;
+    }
 
-	// skips `' '`, `'\t'`, `'\r'`, and optinally '\n'.
-	int skipSpaces()
-	{
-		static if(!spaces)
-		{
-			return pop;
-		}
-		else
-		{
-			version(SSE42)
-			{
-				static if(includingNewLine)
-					enum byte16 str2E = [' ', '\t', '\r', '\n', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-				else
-					enum byte16 str2E = [' ', '\t', '\r', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-				byte16 str2 = str2E;
-				OL: for(;;)
-				{
-					if(setFrontRange == false)
-						return 0;
-					auto d = r;
-					for(;;)
-					{
-						if(d.length >= 16)
-						{
-							byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
+    void skipNewLine()()
+    {
+        assert(front.length);
+        assert(front[0] == '\n');
+        front = front[1 .. $];
+    }
 
-							size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
-							d = d[ecx .. $];
-							
-							if(ecx == 16)
-								continue;
+    char skipSpaces_()()
+    {
+        static if (hasSpaces)
+        for(;;)
+        {
+            if (prepareInput_ == false)
+                return 0;
+            static if (includingNewLine)
+                alias isWhite = isJsonWhitespace;
+            else
+                alias isWhite = isJsonLineWhitespace;
+            if (isWhite(front[0]))
+            {
+                front = front[1 .. $];
+                continue;
+            }
+            return front[0];
+        }
+        else
+        {
+            if (prepareInput_ == false)
+                return 0;
+            return front[0];
+        }
+    }
 
-							int c = d[0];
-							r = d[1 .. $];
-							return c;
-						}
-						else
-						{
-							byte16 str1 = void;
-							str1 ^= str1;
-							switch(d.length)
-							{
-								default   : goto case;
-								case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
-								case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
-								case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
-								case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
-								case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
-								case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
-								case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
-								case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
-								case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
-								case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
-								case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
-								case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
-								case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
-								case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
-								case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
-								case 0x0  : break;
-							}
+    bool skipLine()()
+    {
+        for(;;)
+        {
+            if (prepareInput_ == false)
+                return false;
+            auto c = front[0];
+            front = front[1 .. $];
+            if (c == '\n')
+                return true;
+        }
+    }
 
-							size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
-							r = d = d[ecx .. $];
+    auto result()()
+    {
+        return data[0 .. dataLength];
+    }
 
-							if(d.length == 0)
-								continue OL;
+    string lastError()() @property
+    {
+        return _lastError;
+    }
 
-							int c = d[0];
-							r = d[1 .. $];
-							return c;
-						}
-					}
-				}
-				return 0; // DMD bug workaround
-			}
-			else
-			{
-				for(;;)
-				{
-					int c = pop;
-					switch(c)
-					{
-						case  ' ':
-						case '\r':
-						case '\t':
-						static if(includingNewLine)
-						{
-							case '\n':
-						}
-							continue;
-						default:
-							return c;
-					}
-				}
-			}
-		}
-	}
+    pragma(inline, false)
+    AsdfErrorCode parse()
+    {
+        version(SSE42)
+        {
+            enum byte16 str2E = [
+                '\u0001', '\u001F',
+                '\"', '\"',
+                '\\', '\\',
+                '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+            enum byte16 num2E = ['+', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', '\0'];
+            byte16 str2 = str2E;
+            byte16 num2 = num2E;
+        }
 
-	// reads any value
-	sizediff_t readValue()
-	{
-		int c = skipSpaces;
-		with(Asdf.Kind) switch(c)
-		{
-			case '"': return readStringImpl;
-			case '-':
-			case '0':
-			..
-			case '9': return readNumberImpl(cast(ubyte)c);
-			case '[': return readArrayImpl;
-			case 'f': return readWord!("alse", false_);
-			case 'n': return readWord!("ull" , null_);
-			case 't': return readWord!("rue" , true_);
-			case '{': return readObjectImpl;
-			default : return -c;
-		}
-	}
+        const(ubyte)* strPtr;
+        const(ubyte)* strEnd;
+        ubyte* dataPtr;
+        ubyte* stringAndNumberShift = void;
+        static if (chunked)
+        {
+            pragma(inline, false)
+            bool prepareInput()()
+            {
+                    if (input.empty)
+                    {
+                        return false;
+                    }
+                    front = cast(typeof(front)) input.front;
+                    input.popFront;
+                    if (front.length == 0)
+                        return false;
+                    strPtr = front.ptr;
+                    strEnd = front.ptr + front.length;
+                    const dataAddLength = front.length * 6;
+                    const dataLength = dataPtr - data.ptr;
+                    const dataRequiredLength = dataLength + dataAddLength;
+                    if (data.length < dataRequiredLength)
+                    {
+                        const valueLength = stringAndNumberShift - dataPtr;
+                        import std.algorithm.comparison: max;
+                        allocator.reallocate(*cast(void[]*)&data, max(data.length * 2, dataRequiredLength));
+                        dataPtr = data.ptr + dataLength;
+                        stringAndNumberShift = dataPtr + valueLength;
+                    }
+                return true;
+            }
+            strPtr = front.ptr;
+            strEnd = front.ptr + front.length;
+        }
+        else
+        {
+            strPtr = cast(const(ubyte)*) input.ptr;
+            strEnd = cast(const(ubyte)*) input.ptr + input.length;
+            enum bool prepareInput = false;
+        }
 
-	private dchar readUnicodeImpl()
-	{
-		dchar d = '\0';
-		foreach(i; 0..4)
-		{
-			int c = pop;
-			switch(c)
-			{
-				case '0': .. case '9':
-					c = c - '0';
-					break;
-				case 'a': .. case 'f':
-					c = c - 'a' + 10;
-					break;
-				case 'A': .. case 'F':
-					c = c - 'A' + 10;
-					break;
-				default: return -c;
-			}
-			d <<= 4;
-			d ^= c;
-		}
-		return d;
-	}
+        data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
+        dataPtr = data.ptr;
 
-	/++
-	Encodes `XXXX` to the UTF-8 buffer`, where `XXXX` expected to be hexadecimal character.
-	Returns: `1` on success.
-	+/
-	private int readUnicode()
-	{
-		char[4] buf = void;
-		dchar data = readUnicodeImpl;
-		if(0xD800 <= data && data <= 0xDFFF)
-		{
-			import std.exception: enforce;
-			enum msg = "Invalid surrogate UTF-16 sequence.";
-			enforce(pop == '\\', msg);
-			enforce(pop == 'u', msg);
-			enforce(data < 0xDC00, msg);
-			data = (data & 0x3FF) << 10;
-			dchar trailing = readUnicodeImpl;
-			enforce(0xDC00 <= trailing && trailing <= 0xDFFF);
-			data |= trailing & 0x3FF;
-			data += 0x10000;
-		}
-		if (0xFDD0 <= data && data <= 0xFDEF)
-			return 0;
-		if (((~0xFFFF & data) >> 0x10) <= 0x10 && (0xFFFF & data) >= 0xFFFE)
-			return 0;
-		import std.utf: encode;
-		size_t len = buf.encode(data);
-		foreach(ch; buf[0 .. len])
-		{
-			oa.put1(ch);
-		}
-		return cast(int)len;
-	}
+        pragma(inline, true)
+        bool skipSpaces()()
+        {
+            static if (includingNewLine)
+                alias isWhite = isJsonWhitespace;
+            else
+                alias isWhite = isJsonLineWhitespace;
+            F:
+            {
+                if (_expect(strEnd != strPtr, true))
+                {
+                L:
+                    static if (hasSpaces)
+                    {
+                        if (isWhite(strPtr[0]))
+                        {
+                            strPtr++;
+                                goto F;
+                        }
+                    }
+                    return true;
+                }
+                else
+                {
+                    if (prepareInput)
+                        goto L;
+                    return false;
+                }
+            }
 
+        }
 
-	// reads a string
-	sizediff_t readStringImpl(bool key = false)()
-	{
-		static if(key)
-		{
-			auto s = oa.skip(1);
-		}
-		else
-		{
-			oa.put1(Asdf.Kind.string);
-			auto s = oa.skip(4);
-		}
-		size_t len;
-		int c = void;
-		//int prev;
-		version(SSE42)
-		{
-			enum byte16 str2E = [
-				'\u0001', '\u001F',
-				'\"', '\"',
-				'\\', '\\',
-				'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-			byte16 str2 = str2E;
-			OL: for(;;)
-			{
-				if(setFrontRange == false)
-					return 0;
-				auto d = r;
-				auto ptr = oa.data.ptr;
-				auto datalen = oa.data.length;
-				auto shift = oa.shift;
-				for(;;)
-				{
-					if(datalen < shift + 16)
-					{
-						oa.extend;
-						ptr = oa.data.ptr;
-						datalen = oa.data.length;
-					}
-					if(d.length >= 16)
-					{
-						byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
-						storeUnaligned!ubyte16(str1, ptr + shift);
+        pragma(inline, true)
+        @minsize
+        int readUnicode()(ref dchar d)
+        {
+            uint e = 0;
+            size_t i = 4;
+            do
+            {
+                if (strEnd == strPtr && !prepareInput)
+                    return 1;
+                int c = uniFlags[*strPtr++];
+                assert(c < 16);
+                if (c == -1)
+                    return -1;
+                assert(c >= 0);
+                e <<= 4;
+                e ^= c;
+            }
+            while(--i);
+            d = e;
+            return 0;
+        }
 
-						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
-						shift += ecx;
-						len += ecx;
-						d = d[ecx .. $];
-						
-						if(ecx == 16)
-							continue;
+        Stack!Allocator stack;
 
-						r = d;
-						oa.shift = shift;
-						break;
-					}
-					else
-					{
-						byte16 str1 = void;
-						str1 ^= str1;
-						switch(d.length)
-						{
-							default   : goto case;
-							case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
-							case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
-							case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
-							case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
-							case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
-							case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
-							case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
-							case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
-							case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
-							case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
-							case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
-							case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
-							case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
-							case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
-							case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
-							case 0x0  : break;
-						}
+        typeof(return) retCode;
+        bool currIsKey = void;
+        size_t stackValue = void;
+        goto value;
 
-						storeUnaligned!ubyte16(str1, ptr + shift);
+/////////// RETURN
+    ret:
+        front = front[cast(typeof(front.ptr)) strPtr - front.ptr .. $];
+        dataLength = dataPtr - data.ptr;
+        assert(stack.length == 0);
+    ret_final:
+        return retCode;
+///////////
 
-						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
+    key:
+        if (!skipSpaces)
+            goto object_key_unexpectedEnd;
+    key_start:
+        if (*strPtr != '"')
+            goto object_key_start_unexpectedValue;
+        currIsKey = true;
+        stringAndNumberShift = dataPtr;
+        // reserve 1 byte for the length
+        dataPtr += 1;
+        goto string;
+    next:
+        if (stack.length == 0)
+            goto ret;
+        {
+            if (!skipSpaces)
+                goto next_unexpectedEnd;
+            stackValue = stack.top;
+            const isObject = stackValue & 1;
+            auto v = *strPtr++;
+            if (isObject)
+            {
+                if (v == ',')
+                    goto key;
+                if (v != '}')
+                    goto next_unexpectedValue;
+            }
+            else
+            {
+                if (v == ',')
+                    goto value;
+                if (v != ']')
+                    goto next_unexpectedValue;
+            }
+        }
+    structure_end: {
+        stackValue = stack.pop(*allocator);
+        const structureShift = stackValue >> 1;
+        const structureLengthPtr = data.ptr + structureShift;
+        const size_t structureLength = dataPtr - structureLengthPtr - 4;
+        if (structureLength > uint.max)
+            goto object_or_array_is_to_large;
+        version(X86_Any)
+            *cast(uint*) structureLengthPtr = cast(uint) structureLength;
+        else
+            static assert(0, "not implemented");
+        goto next;
+    }
+    value:
+        if (!skipSpaces)
+            goto value_unexpectedEnd;
+    value_start:
+        switch(*strPtr)
+        {
+            stringValue:
+            case '"':
+                currIsKey = false;
+                *dataPtr++ = Asdf.Kind.string;
+                stringAndNumberShift = dataPtr;
+                // reserve 4 byte for the length
+                dataPtr += 4;
+                goto string;
+            case '-':
+            case '0':
+            ..
+            case '9': {
+                *dataPtr++ = Asdf.Kind.number;
+                stringAndNumberShift = dataPtr;
+                // reserve 1 byte for the length
+                dataPtr++;
+                // write the first character
+                *dataPtr++ = *strPtr++;
+                for(;;)
+                {
+                    if (strEnd == strPtr && !prepareInput)
+                        goto number_found;
+                    version(SSE42)
+                    {
+                        while (strEnd >= strPtr + 16)
+                        {
+                            byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                            size_t ecx = __builtin_ia32_pcmpistri128(num2, str1, 0x10);
+                            storeUnaligned!ubyte16(str1, dataPtr);
+                            strPtr += ecx;
+                            dataPtr += ecx;
+                            if(ecx != 16)
+                                goto number_found;
+                        }
+                    }
+                    while(strEnd >= strPtr + 4)
+                    {
+                        char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto number_found0;
+                        char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isJsonNumber(c1)) goto number_found1;
+                        char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isJsonNumber(c2)) goto number_found2;
+                        char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isJsonNumber(c3)) goto number_found3;
+                        strPtr += 4;         dataPtr[-1] = c3;
+                    }
+                    while(strEnd > strPtr)
+                    {
+                        char c0 = strPtr[0]; if (!isJsonNumber(c0)) goto number_found; dataPtr[0] = c0;
+                        strPtr += 1;
+                        dataPtr += 1;
+                    }
+                }
+            number_found3: dataPtr++; strPtr++;
+            number_found2: dataPtr++; strPtr++;
+            number_found1: dataPtr++; strPtr++;
+            number_found0: dataPtr -= 4;
+            number_found:
 
-						if(ecx == 16)
-						{
-							shift += d.length;
-							len += d.length;
-							r = null;
+                auto numberLength = dataPtr - stringAndNumberShift - 1;
+                if (numberLength > ubyte.max)
+                    goto number_length_unexpectedValue;
+                *stringAndNumberShift = cast(ubyte) numberLength;
+                goto next;
+            }
+            case '{':
+                strPtr++;
+                *dataPtr++ = Asdf.Kind.object;
+                stack.push(((dataPtr - data.ptr) << 1) ^ 1, *allocator);
+                dataPtr += 4;
+                if (!skipSpaces)
+                    goto object_first_value_start_unexpectedEnd;
+                if (*strPtr != '}')
+                    goto key_start;
+                strPtr++;
+                goto structure_end;
+            case '[':
+                strPtr++;
+                *dataPtr++ = Asdf.Kind.array;
+                stack.push(((dataPtr - data.ptr) << 1) ^ 0, *allocator);
+                dataPtr += 4;
+                if (!skipSpaces)
+                    goto array_first_value_start_unexpectedEnd;
+                if (*strPtr != ']')
+                    goto value_start;
+                strPtr++;
+                goto structure_end;
+            foreach (name; AliasSeq!("false", "null", "true"))
+            {
+            case name[0]:
+                    if (_expect(strEnd - strPtr >= name.length, true))
+                    {
+                        static if (!assumeValid)
+                        {
+                            version(X86_Any)
+                            {
+                                enum uint referenceValue =
+                                        (uint(name[$ - 4]) << 0x00) ^ 
+                                        (uint(name[$ - 3]) << 0x08) ^ 
+                                        (uint(name[$ - 2]) << 0x10) ^ 
+                                        (uint(name[$ - 1]) << 0x18);
+                                if (*cast(uint*)(strPtr + bool(name.length == 5)) != referenceValue)
+                                {
+                                    static if (name == "true")
+                                        goto true_unexpectedValue;
+                                    else
+                                    static if (name == "false")
+                                        goto false_unexpectedValue;
+                                    else
+                                        goto null_unexpectedValue;
+                                }
+                            }
+                            else
+                            {
+                                char[name.length - 1] c = void;
+                                import std.range: iota;
+                                foreach (i; aliasSeqOf!(iota(1, name.length)))
+                                    c[i - 1] = strPtr[i];
+                                foreach (i; aliasSeqOf!(iota(1, name.length)))
+                                {
+                                    if (c[i - 1] != name[i])
+                                    {
+                                        
+                                        static if (name == "true")
+                                            goto true_unexpectedValue;
+                                        else
+                                        static if (name == "false")
+                                            goto false_unexpectedValue;
+                                        else
+                                            goto null_unexpectedValue;
+                                    }
+                                }
+                            }
+                        }
+                        static if (name == "null")
+                            *dataPtr++ = Asdf.Kind.null_;
+                        else
+                        static if (name == "false")
+                            *dataPtr++ = Asdf.Kind.false_;
+                        else
+                            *dataPtr++ = Asdf.Kind.true_;
+                        strPtr += name.length;
+                        goto next;
+                    }
+                    else
+                    {
+                        strPtr += 1;
+                        foreach (i; 1 .. name.length)
+                        {
+                            if (strEnd == strPtr && !prepareInput)
+                            {
+                                static if (name == "true")
+                                    goto true_unexpectedEnd;
+                                else
+                                static if (name == "false")
+                                    goto false_unexpectedEnd;
+                                else
+                                    goto null_unexpectedEnd;
+                            }
+                            static if (!assumeValid)
+                            {
+                                if (_expect(strPtr[0] != name[i], false))
+                                {
+                                    static if (name == "true")
+                                        goto true_unexpectedValue;
+                                    else
+                                    static if (name == "false")
+                                        goto false_unexpectedValue;
+                                    else
+                                        goto null_unexpectedValue;
+                                }
+                            }
+                            strPtr++;
+                        }
+                        static if (name == "null")
+                            *dataPtr++ = Asdf.Kind.null_;
+                        else
+                        static if (name == "false")
+                            *dataPtr++ = Asdf.Kind.false_;
+                        else
+                            *dataPtr++ = Asdf.Kind.true_;
+                        goto next;
+                    }
+            }
 
-							oa.shift = shift;
-							continue OL;
-						}
+            default :
+                import std.conv;
+                assert(0, strPtr[0].to!string);
+        }
 
-						shift += ecx;
-						len += ecx;
-						r = d[ecx .. $];
+    string:
+        assert(*strPtr == '"');
+        strPtr += 1;
 
-						oa.shift = shift;
-						break;
-					}
-				}
-				c = r[0];
-				r = r[1 .. $];
-				if(c == '\"')
-				{
-					static if(key)
-					{
-						oa.put1(cast(ubyte)len, s);
-						return len + 1;
-					}
-					else
-					{
-						oa.put4(cast(uint)len, s);
-						return len + 5;
-					}
-				}
-				if(c == '\\')
-				{
-					c = pop;
-					len++;
-					switch(c)
-					{
-						case '/' : oa.put1('/');  continue;
-						case '\"': oa.put1('\"'); continue;
-						case '\\': oa.put1('\\'); continue;
-						case 'b' : oa.put1('\b'); continue;
-						case 'f' : oa.put1('\f'); continue;
-						case 'n' : oa.put1('\n'); continue;
-						case 'r' : oa.put1('\r'); continue;
-						case 't' : oa.put1('\t'); continue;
-						case 'u' :
-							c = readUnicode();
-							if(c >= 0)
-							{
-								len += c - 1;
-								continue;
-							}
-							goto default;
-						default  :
-					}
-				}
-				return -c;
-			}
-			return 0; // DMD bug workaround
-		}
-		else
-		{
-			for(;;)
-			{
-				c = pop;
-				if(c == '\"')
-				{
-					static if(key)
-					{
-						oa.put1(cast(ubyte)len, s);
-						return len + 1;
-					}
-					else
-					{
-						oa.put4(cast(uint)len, s);
-						return len + 5;
-					}
-				}
-				if(c < ' ')
-				{
-					return -c;
-				}
-				if(c == '\\')
-				{
-					c = pop;
-					switch(c)
-					{
-						case '/' :           break;
-						case '\"':           break;
-						case '\\':           break;
-						case 'b' : c = '\b'; break;
-						case 'f' : c = '\f'; break;
-						case 'n' : c = '\n'; break;
-						case 'r' : c = '\r'; break;
-						case 't' : c = '\t'; break;
-						case 'u' :
-							c = readUnicode();
-							if(c >= 0)
-							{
-								len += c;
-								continue;
-							}
-							return -c;
-						default: return -c;
-					}
-				}
-				oa.put1(cast(ubyte)c);
-				len++;
-			}
-		}
-	}
+    StringLoop: {
+        for(;;)
+        {
+            if (strEnd == strPtr && !prepareInput)
+                goto string_unexpectedEnd;
+            version(SSE42)
+            {
+                while (strEnd >= strPtr + 16)
+                {
+                    byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                    size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
+                    storeUnaligned!ubyte16(str1, dataPtr);
+                    strPtr += ecx;
+                    dataPtr += ecx;
+                    if(ecx != 16)
+                        goto string_found;
+                }
+            }
+            while(strEnd >= strPtr + 4)
+            {
+                char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
+                char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
+                char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
+                char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
+                strPtr += 4;         dataPtr[-1] = c3;
+            }
+            while(strEnd > strPtr)
+            {
+                char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto string_found; dataPtr[0] = c0;
+                strPtr += 1;
+                dataPtr += 1;
+            }
+        }
+        string_found3: dataPtr++; strPtr++;
+        string_found2: dataPtr++; strPtr++;
+        string_found1: dataPtr++; strPtr++;
+        string_found0: dataPtr -= 4;
+        string_found:
 
-	unittest
-	{
-		import std.string;
-		import std.range;
-		static immutable str = `"1234567890qwertyuiopasdfghjklzxcvbnm"`;
-		auto data = Asdf(str[1..$-1]);
-		assert(data == parseJson(str));
-		foreach(i; 1 .. str.length)
-			assert(data == parseJson(str.representation.chunks(i)));
-	}
+        uint c = strPtr[0];
+        if (c == '\"')
+        {
+            strPtr += 1;
+            if (currIsKey)
+            {
+                auto stringLength = dataPtr - stringAndNumberShift - 1;
+                if (stringLength > ubyte.max)
+                    goto key_is_to_large;
+                *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
+                if (!skipSpaces)
+                    goto failed_to_read_after_key;
+                if (*strPtr != ':')
+                    goto unexpected_character_after_key;
+                strPtr++;
+                goto value;
+            }
+            else
+            {
+                auto stringLength = dataPtr - stringAndNumberShift - 4;
+                if (stringLength > uint.max)
+                    goto string_length_is_too_large;
+                version(X86_Any)
+                    *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
+                else
+                    static assert(0, "not implemented");
+                goto next;
+            }
+        }
+        if (c == '\\')
+        {
+            strPtr += 1;
+            if (strEnd == strPtr && !prepareInput)
+                goto string_unexpectedEnd;
+            c = strPtr[0];
+            strPtr += 1;
+            switch(c)
+            {
+                case '/' :           goto backSlashReplace;
+                case '\"':           goto backSlashReplace;
+                case '\\':           goto backSlashReplace;
+                case 'b' : c = '\b'; goto backSlashReplace;
+                case 'f' : c = '\f'; goto backSlashReplace;
+                case 'n' : c = '\n'; goto backSlashReplace;
+                case 'r' : c = '\r'; goto backSlashReplace;
+                case 't' : c = '\t'; goto backSlashReplace;
+                backSlashReplace:
+                    *dataPtr++ = cast(ubyte) c;
+                    goto StringLoop;
+                case 'u' :
+                    uint wur = void;
+                    dchar d = void;
+                    if (auto r = (readUnicode(d)))
+                    {
+                        if (r == 1)
+                            goto string_unexpectedEnd;
+                        goto string_unexpectedValue;
+                    }
+                    if (_expect(0xD800 <= d && d <= 0xDFFF, false))
+                    {
+                        if (d >= 0xDC00)
+                            goto string_unexpectedValue;
+                        if (strEnd == strPtr && !prepareInput)
+                            goto string_unexpectedEnd;
+                        if (*strPtr++ != '\\')
+                            goto string_unexpectedValue;
+                        if (strEnd == strPtr && !prepareInput)
+                            goto string_unexpectedEnd;
+                        if (*strPtr++ != 'u')
+                            goto string_unexpectedValue;
+                        d = (d & 0x3FF) << 10;
+                        dchar trailing;
+                        if (auto r = (readUnicode(trailing)))
+                        {
+                            if (r == 1)
+                                goto string_unexpectedEnd;
+                            goto string_unexpectedValue;
+                        }
+                        if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
+                            goto invalid_trail_surrogate;
+                        {
+                            d |= trailing & 0x3FF;
+                            d += 0x10000;
+                        }
+                    }
+                    if (!(d < 0xD800 || (d > 0xDFFF && d <= 0x10FFFF)))
+                        goto invalid_utf_value;
+                    encodeUTF8(d, dataPtr);
+                    goto StringLoop;
+                default: goto string_unexpectedValue;
+            }
+        }
+        goto string_unexpectedValue;
+    }
 
-	unittest
-	{
-		import std.string;
-		import std.range;
-		static immutable str = `"\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/"`;
-		auto data = Asdf("\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/");
-		assert(data == parseJson(str));
-		foreach(i; 1 .. str.length)
-			assert(data == parseJson(str.representation.chunks(i)));
-	}
-
-	unittest
-	{
-		import std.string;
-		import std.range;
-		static immutable str = `"\u0026"`;
-		auto data = Asdf("&");
-		assert(data == parseJson(str));
-	}
-
-	// reads a number
-	sizediff_t readNumberImpl(ubyte c)
-	{
-		oa.put1(Asdf.Kind.number);
-		auto s = oa.skip(1);
-		uint len = 1;
-		oa.put1(c);
-		version(SSE42)
-		{
-			enum byte16 str2E = ['+', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', '\0'];
-			byte16 str2 = str2E;
-			OL: for(;;)
-			{
-				if(setFrontRange == false)
-				{
-					oa.put1(cast(ubyte)len, s);
-					return len + 2;
-				}
-				auto d = r;
-				auto ptr = oa.data.ptr;
-				auto datalen = oa.data.length;
-				auto shift = oa.shift;
-				for(;;)
-				{
-					if(datalen < shift + 16)
-					{
-						oa.extend;
-						ptr = oa.data.ptr;
-						datalen = oa.data.length;
-					}
-					if(d.length >= 16)
-					{
-						byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
-						storeUnaligned!ubyte16(str1, ptr + shift);
-
-						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
-						shift += ecx;
-						len += ecx;
-						d = d[ecx .. $];
-
-						if(ecx == 16)
-							continue;
-
-						r = d;
-						oa.shift = shift;
-						oa.put1(cast(ubyte)len, s);
-						return len + 2;
-					}
-					else
-					{
-						byte16 str1 = void;
-						str1 ^= str1;
-						switch(d.length)
-						{
-							default   : goto case;
-							case 0xE+1: str1.array[0xE] = d[0xE]; goto case;
-							case 0xD+1: str1.array[0xD] = d[0xD]; goto case;
-							case 0xC+1: str1.array[0xC] = d[0xC]; goto case;
-							case 0xB+1: str1.array[0xB] = d[0xB]; goto case;
-							case 0xA+1: str1.array[0xA] = d[0xA]; goto case;
-							case 0x9+1: str1.array[0x9] = d[0x9]; goto case;
-							case 0x8+1: str1.array[0x8] = d[0x8]; goto case;
-							case 0x7+1: str1.array[0x7] = d[0x7]; goto case;
-							case 0x6+1: str1.array[0x6] = d[0x6]; goto case;
-							case 0x5+1: str1.array[0x5] = d[0x5]; goto case;
-							case 0x4+1: str1.array[0x4] = d[0x4]; goto case;
-							case 0x3+1: str1.array[0x3] = d[0x3]; goto case;
-							case 0x2+1: str1.array[0x2] = d[0x2]; goto case;
-							case 0x1+1: str1.array[0x1] = d[0x1]; goto case;
-							case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
-							case 0x0  : break;
-						}
-						storeUnaligned!ubyte16(str1, ptr + shift);
-						size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x10);
-						shift += ecx;
-						len += ecx;
-						r = d[ecx .. $];
-						oa.shift = shift;
-
-						if(ecx == d.length)
-							continue OL;
-
-						oa.put1(cast(ubyte)len, s);
-						return len + 2;
-					}
-				}
-			}
-			return 0; // DMD bug workaround
-		}
-		else
-		{
-			for(;;)
-			{
-				uint d = front;
-				switch(d)
-				{
-					case '+':
-					case '-':
-					case '.':
-					case '0':
-					..
-					case '9':
-					case 'e':
-					case 'E':
-						popFront;
-						oa.put1(cast(ubyte)d);
-						len++;
-						break;
-					default :
-						oa.put1(cast(ubyte)len, s);
-						return len + 2;
-				}
-			}
-		}
-	}
-
-	unittest
-	{
-		import std.string;
-		import std.range;
-		import std.conv;
-		static immutable str = `941763918276349812734691287354912873459128635412037501236410234567123847512983745126`;
-		assert(str == parseJson(str).to!string);
-		foreach(i; 1 .. str.length)
-			assert(str == parseJson(str.representation.chunks(i)).to!string);
-	}
-
-	// reads `ull`, `rue`, or `alse`
-	sizediff_t readWord(string word, ubyte t)()
-	{
-		oa.put1(t);
-		version(SSE42)
-		if(r.length >= word.length)
-		{
-			static if (word == "ull")
-			{
-				enum byte16 str2E = ['u', 'l', 'l', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-			}
-			else
-			static if (word == "rue")
-			{
-				enum byte16 str2E = ['r', 'u', 'e', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-			}
-			else
-			static if (word == "alse")
-			{
-				enum byte16 str2E = ['a', 'l', 's', 'e', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-			}
-			else
-			{
-				static assert(0, "'" ~ word ~ "' is not defined for simd operations.");
-			}
-
-			byte16 str2 = str2E;
-			if(setFrontRange == false)
-				return 0;
-			auto d = r;
-			byte16 str1 = void;
-			str1 ^= str1;
-			static if(word.length == 3)
-			{
-				str1.array[0x0] = d[0x0];
-				str1.array[0x1] = d[0x1];
-				str1.array[0x2] = d[0x2];
-			}
-			else
-			static if(word.length == 4)
-			{
-				str1.array[0x0] = d[0x0];
-				str1.array[0x1] = d[0x1];
-				str1.array[0x2] = d[0x2];
-				str1.array[0x3] = d[0x3];
-			}
-			auto cflag = __builtin_ia32_pcmpistric128(str2 , str1, 0x38);
-			auto ecx   = __builtin_ia32_pcmpistri128 (str2 , str1, 0x38);
-			if(!cflag)
-				return -d[ecx];
-			assert(ecx == word.length);
-			r = d[ecx .. $];
-			return 1;
-		}
-		foreach(i; 0 .. word.length)
-		{
-			auto c = pop;
-			if(c != word[i])
-				return -c;
-		}
-		return 1;
-	}
-
-	// reads an array
-	sizediff_t readArrayImpl()
-	{
-		oa.put1(Asdf.Kind.array);
-		auto s = oa.skip(4);
-		uint len;
-		L: for(;;)
-		{
-			auto v = readValue;
-			if(v <= 0)
-			{
-				if(-v == ']' && len == 0)
-					break;
-				return v;
-			}
-			len += v;
-
-			auto c = skipSpaces;
-			switch(c)
-			{
-				case ',': continue;
-				case ']': break L;
-				default : return -c;
-			}
-		}
-		oa.put4(len, s);
-		return len + 5;
-	}
-
-	// reads an object
-	sizediff_t readObjectImpl()
-	{
-		oa.put1(Asdf.Kind.object);
-		auto s = oa.skip(4);
-		uint len;
-		L: for(;;)
-		{
-			auto c = skipSpaces;
-			if(c == '"')
-			{
-				auto v = readStringImpl!true;
-				if(v <= 0)
-				{
-					return v;
-				}
-				len += v;
-			}
-			else
-			if(c == '}' && len == 0)
-			{
-				break;
-			}
-			else
-			{
-				return -c;
-			}
-
-			c = skipSpaces;
-			if(c != ':')
-				return -c;
-
-			auto v = readValue;
-			if(v <= 0)
-			{
-				return v;
-			}
-			len += v;
-
-			c = skipSpaces;
-			switch(c)
-			{
-				case ',': continue;
-				case '}': break L;
-				default : return -c;
-			}
-		}
-		oa.put4(len, s);
-		return len + 5;
-	}
+    ret_error:
+        dataLength = dataPtr - data.ptr;
+        stack.free(*allocator);
+        goto ret_final;
+    unexpectedEnd:
+        retCode = AsdfErrorCode.unexpectedEnd;
+        goto ret_error;
+    unexpectedValue:
+        retCode = AsdfErrorCode.unexpectedValue;
+        goto ret_error;
+    object_key_unexpectedEnd:
+        _lastError = "unexpected end of object key";
+        goto unexpectedEnd;
+    object_key_start_unexpectedValue:
+        _lastError = "expected '\"' when when start parsing object key";
+        goto unexpectedValue;
+    key_is_to_large:
+        _lastError = "key length is limited to 255 characters";
+        goto unexpectedValue;
+    object_or_array_is_to_large:
+        _lastError = "object or array serialized size is limited to 2^32-1";
+        goto unexpectedValue;
+    next_unexpectedEnd:
+        stackValue = stack.top;
+        _lastError = (stackValue & 1) ? "unexpected end when parsing object" : "unexpected end when parsing array";
+        goto unexpectedEnd;
+    next_unexpectedValue:
+        stackValue = stack.top;
+        _lastError = (stackValue & 1) ? "expected ',' or `}` when parsing object" : "expected ',' or `]` when parsing array";
+        goto unexpectedValue;
+    value_unexpectedEnd:
+        _lastError = "unexpected end when start parsing JSON value";
+        goto unexpectedEnd;
+    number_length_unexpectedValue:
+        _lastError = "number length is limited to 255 characters";
+        goto unexpectedValue;
+    object_first_value_start_unexpectedEnd:
+        _lastError = "unexpected end of input data after '{'";
+        goto unexpectedEnd;
+    array_first_value_start_unexpectedEnd:
+        _lastError = "unexpected end of input data after '['";
+        goto unexpectedEnd;
+    false_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'false'";
+        goto unexpectedEnd;
+    false_unexpectedValue:
+        _lastError = "unexpected character when parsing 'false'";
+        goto unexpectedValue;
+    null_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'null'";
+        goto unexpectedEnd;
+    null_unexpectedValue:
+        _lastError = "unexpected character when parsing 'null'";
+        goto unexpectedValue;
+    true_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'true'";
+        goto unexpectedEnd;
+    true_unexpectedValue:
+        _lastError = "unexpected character when parsing 'true'";
+        goto unexpectedValue;
+    string_unexpectedEnd:
+        _lastError = "unexpected end when parsing string";
+        goto unexpectedEnd;
+    string_unexpectedValue:
+        _lastError = "unexpected character when parsing string";
+        goto unexpectedValue;
+    failed_to_read_after_key:
+        _lastError = "unexpected end after object key";
+        goto unexpectedEnd;
+    unexpected_character_after_key:
+        _lastError = "unexpected character after key";
+        goto unexpectedValue;
+    string_length_is_too_large:
+        _lastError = "string size is limited to 2^32-1";
+        goto unexpectedValue;
+    invalid_trail_surrogate:
+        _lastError = "invalid UTF-16 trail surrogate";
+        goto unexpectedValue;
+    invalid_utf_value:
+        _lastError = "invalid UTF value";
+        goto unexpectedValue;
+    }
 }
 
 unittest
 {
-	auto asdf = "[\"\u007F\"]".parseJson;
+    import std.conv;
+    auto asdf_data = parseJson(` [ true, 123 , [ false, 123.0 , "123211" ], "3e23e" ] `);
+    auto str = asdf_data.to!string;
+    auto str2 = `[true,123,[false,123.0,"123211"],"3e23e"]`;
+    assert( str == str2);
+}
+
+pragma(inline, true)
+void encodeUTF8()(dchar c, ref ubyte* ptr)
+{   
+    if (c < 0x80)
+    {
+        ptr[0] = cast(ubyte) (c);
+        ptr += 1;
+    }
+    else
+    if (c < 0x800)
+    {
+        ptr[0] = cast(ubyte) (0xC0 | (c >> 6));
+        ptr[1] = cast(ubyte) (0x80 | (c & 0x3F));
+        ptr += 2;
+    }
+    else
+    if (c < 0x10000)
+    {
+        ptr[0] = cast(ubyte) (0xE0 | (c >> 12));
+        ptr[1] = cast(ubyte) (0x80 | ((c >> 6) & 0x3F));
+        ptr[2] = cast(ubyte) (0x80 | (c & 0x3F));
+        ptr += 3;
+    }
+    else
+    {
+    //    assert(c < 0x200000);
+        ptr[0] = cast(ubyte) (0xF0 | (c >> 18));
+        ptr[1] = cast(ubyte) (0x80 | ((c >> 12) & 0x3F));
+        ptr[2] = cast(ubyte) (0x80 | ((c >> 6) & 0x3F));
+        ptr[3] = cast(ubyte) (0x80 | (c & 0x3F));
+        ptr += 4;
+    }
 }
 
 unittest
 {
-	auto f = `"\uD801\uDC37"`.parseJson;
-	assert(f == "\"\U00010437\"".parseJson);
+    auto asdf = "[\"\u007F\"]".parseJson;
+}
+
+unittest
+{
+    auto f = `"\uD801\uDC37"`.parseJson;
+    assert(f == "\"\U00010437\"".parseJson);
+}
+
+unittest
+{
+    import std.string;
+    import std.range;
+    static immutable str = `"1234567890qwertyuiopasdfghjklzxcvbnm"`;
+    auto data = Asdf(str[1..$-1]);
+    assert(data == parseJson(str));
+    foreach(i; 1 .. str.length)
+    {
+        auto s  = parseJson(str.representation.chunks(i));
+        assert(data == s);
+    }
+}
+
+unittest
+{
+    import std.string;
+    import std.range;
+    static immutable str = `"\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/\t\r\f\b\"\\\/"`;
+    auto data = Asdf("\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/\t\r\f\b\"\\/");
+    assert(data == parseJson(str));
+    foreach(i; 1 .. str.length)
+        assert(data == parseJson(str.representation.chunks(i)));
+}
+
+unittest
+{
+    import std.string;
+    import std.range;
+    static immutable str = `"\u0026"`;
+    auto data = Asdf("&");
+    assert(data == parseJson(str));
+}
+
+unittest
+{
+    import std.string;
+    import std.range;
+    import std.conv;
+    static immutable str = `941763918276349812734691287354912873459128635412037501236410234567123847512983745126`;
+    assert(str == parseJson(str).to!string);
+    foreach(i; 1 .. str.length)
+    {
+        assert(str == parseJson(str.representation.chunks(i)).to!string);
+
+    }
 }

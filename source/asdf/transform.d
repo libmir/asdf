@@ -8,7 +8,7 @@ Authors: Ilya Yaroshenko
 
 License: BSL-1.0
 +/
-module asdf.transformation;
+module asdf.transform;
 
 import asdf.asdf;
 import asdf.serialization;

@@ -2,6 +2,12 @@ module asdf.outputarray;
 
 import asdf.asdf;
 
+version(X86_64)
+    version = X86_Any;
+else
+version(X86)
+    version = X86_Any;
+
 package struct OutputArray
 {
 	import std.experimental.allocator;
@@ -70,8 +76,10 @@ package struct OutputArray
 		immutable newShift = sh + 4;
 		if(newShift > data.length)
 			extend;
-
-		*cast(uint*) (data.ptr + sh) = b;
+		version (X86_Any)
+			*cast(uint*) (data.ptr + sh) = b;
+		else
+			static assert(0, "not implemented for this target");
 	}
 
 	void extend(size_t len)

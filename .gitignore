@@ -41,6 +41,11 @@ JSONTestSuite/
 sajson-benchmark/sajson-benchmark
 
 .vscode
+bin/ut.d
+asdf-test-library
+asdf
+benchmarks/sajson/sajson-benchmark
+source/old.d
 *.lib
 *.exe
 .vs
