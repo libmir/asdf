@@ -72,7 +72,8 @@ Asdf parseJson(
     enum assumeValid = false;
     import std.experimental.allocator.gc_allocator;
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
-    auto err = parser.parse;
+    if (parser.parse)
+        throw new Exception(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -103,7 +104,8 @@ Asdf parseJson(
     (in char[] str, Allocator allocator)
 {
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
-    parser.parse();
+    if (parser.parse)
+        throw new Exception(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -118,7 +120,8 @@ Asdf parseJson(
     import std.experimental.allocator;
     import std.experimental.allocator.gc_allocator;
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
-    parser.parse();
+    if (parser.parse)
+        throw new Exception(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -147,7 +150,7 @@ auto parseJsonByLine(
     alias Parser = JsonParser!(false, cast(bool)spaces, false, shared GCAllocator, Input);
     static struct ByLineValue
     {
-        private Parser parser;
+        Parser parser;
         private bool _empty, _nextEmpty;
 
         void popFront()
@@ -167,6 +170,7 @@ auto parseJsonByLine(
                 if(t != '\n' && t != 0)
                 {
                     error = AsdfErrorCode.unexpectedValue;
+                    parser._lastError = "expected new line or end of input";
                 }
                 else
                 if(t == 0)
@@ -181,6 +185,8 @@ auto parseJsonByLine(
                     return;
                 }
             }
+            if (error)
+                throw new Exception(parser.lastError);
             parser.skipLine;
             _nextEmpty = parser.prepareInput_;
         }
@@ -476,6 +482,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
     char skipSpaces_()()
     {
+        static if (hasSpaces)
         for(;;)
         {
             if (prepareInput_ == false)
@@ -489,6 +496,12 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 front = front[1 .. $];
                 continue;
             }
+            return front[0];
+        }
+        else
+        {
+            if (prepareInput_ == false)
+                return 0;
             return front[0];
         }
     }
@@ -588,10 +601,13 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 if (_expect(strEnd != strPtr, true))
                 {
                 L:
-                    if (isWhite(strPtr[0]))
+                    static if (hasSpaces)
                     {
-                        strPtr++;
-                            goto F;
+                        if (isWhite(strPtr[0]))
+                        {
+                            strPtr++;
+                                goto F;
+                        }
                     }
                     return true;
                 }
