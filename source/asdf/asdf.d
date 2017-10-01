@@ -591,7 +591,7 @@ struct Asdf
 		import std.traits: isNumeric;
 		import std.conv: to, ConvException;
 		import std.format: format;
-		import std.math: lround, trunc;
+		import std.math: trunc;
 		import asdf.serialization;
 		auto k = kind;
 		with(Kind) switch(kind)
@@ -623,8 +623,8 @@ struct Asdf
 					auto unixTime = str.to!real;
 					auto secsR = unixTime.trunc;
 					auto rem = unixTime - secsR;
-					auto st = SysTime.fromUnixTime(lround(secsR), UTC());
-					st.fracSecs = usecs(lround(rem * 1_000_000));
+					auto st = SysTime.fromUnixTime(cast(long)(secsR), UTC());
+					st.fracSecs = usecs(cast(long)(rem * 1_000_000));
 					return st.to!T;
 				}
 				else
