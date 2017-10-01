@@ -638,10 +638,10 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
     key:
         if (!skipSpaces)
-            goto object_unexpectedEnd; // TODO
+            goto object_key_unexpectedEnd;
     key_start:
         if (*strPtr != '"')
-            goto object_unexpectedValue; // TODO
+            goto object_key_start_unexpectedValue;
         currIsKey = true;
         stringAndNumberShift = dataPtr;
         // reserve 1 byte for the length
@@ -652,7 +652,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             goto ret;
         {
             if (!skipSpaces)
-                goto    array_unexpectedEnd; // TODO: proper error
+                goto    next_unexpectedEnd;
             stackValue = stack.top;
             const isObject = stackValue & 1;
             auto v = *strPtr++;
@@ -677,11 +677,11 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
         const structureLengthPtr = data.ptr + structureShift;
         const size_t structureLength = dataPtr - structureLengthPtr - 4;
         if (structureLength > uint.max)
-            goto    array_unexpectedValue; //TODO: proper error
+            goto object_or_array_is_to_large;
         version(X86_Any)
             *cast(uint*) structureLengthPtr = cast(uint) structureLength;
         else
-            static assert(0);
+            static assert(0, "not implemented");
         goto next;
     }
     value:
@@ -748,7 +748,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
 
                 auto numberLength = dataPtr - stringAndNumberShift - 1;
                 if (numberLength > ubyte.max)
-                    goto null_unexpectedValue; // TODO: replace proper error
+                    goto number_length_unexpectedValue;
                 *stringAndNumberShift = cast(ubyte) numberLength;
                 goto next;
             }
@@ -758,7 +758,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 stack.push(((dataPtr - data.ptr) << 1) ^ 1, *allocator);
                 dataPtr += 4;
                 if (!skipSpaces)
-                    goto value_unexpectedEnd; // TODO
+                    goto object_first_value_start_unexpectedEnd;
                 if (*strPtr != '}')
                     goto key_start;
                 strPtr++;
@@ -769,7 +769,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 stack.push(((dataPtr - data.ptr) << 1) ^ 0, *allocator);
                 dataPtr += 4;
                 if (!skipSpaces)
-                    goto value_unexpectedEnd; // TODO
+                    goto array_first_value_start_unexpectedEnd;
                 if (*strPtr != ']')
                     goto value_start;
                 strPtr++;
@@ -877,12 +877,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 assert(0, strPtr[0].to!string);
         }
 
-    // key:
-    // 	currIsKey = true;
-    // 	stringAndNumberShift = shift;
-    // 	shift += 1;
-    // 	goto string;
-
     string:
         assert(*strPtr == '"');
         strPtr += 1;
@@ -934,12 +928,12 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             {
                 auto stringLength = dataPtr - stringAndNumberShift - 1;
                 if (stringLength > ubyte.max)
-                    goto null_unexpectedValue; // TODO: replace proper error
+                    goto key_is_to_large;
                 *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
                 if (!skipSpaces)
-                    goto    array_unexpectedEnd; // TODO: proper error
+                    goto failed_to_read_after_key;
                 if (*strPtr != ':')
-                    goto object_unexpectedValue; // TODO: proper error
+                    goto unexpected_character_after_key;
                 strPtr++;
                 goto value;
             }
@@ -947,11 +941,11 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             {
                 auto stringLength = dataPtr - stringAndNumberShift - 4;
                 if (stringLength > uint.max)
-                    goto null_unexpectedValue; // TODO: replace proper error
+                    goto string_length_is_too_large;
                 version(X86_Any)
                     *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
                 else
-                    static assert(0);
+                    static assert(0, "not implemented");
                 goto next;
             }
         }
@@ -1005,16 +999,14 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                             goto string_unexpectedValue;
                         }
                         if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
-                            goto string_unexpectedValue;
+                            goto invalid_trail_surrogate;
                         {
                             d |= trailing & 0x3FF;
                             d += 0x10000;
                         }
                     }
-                    if (0xFDD0 <= d && d <= 0xFDEF)
-                        goto string_unexpectedEnd; // TODO: review
-                    if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
-                        goto string_unexpectedEnd; // TODO: review 
+                    if (!(d < 0xD800 || (d > 0xDFFF && d <= 0x10FFFF)))
+                        goto invalid_utf_value;
                     encodeUTF8(d, dataPtr);
                     goto StringLoop;
                 default: goto string_unexpectedValue;
