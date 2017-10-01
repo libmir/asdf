@@ -449,19 +449,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
         this.allocator = &allocator;
     }
 
-    enum State
-    {
-        unexpected,
-        vObject,
-        vArray,
-        vNumber,
-        vString,
-        vFalse,
-        vNull,
-        vTrue,
-        vValue,
-    }
-
     bool prepareInput_()()
     {
         static if (chunked)
@@ -515,8 +502,6 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
                 return true;
         }
     }
-
-    State state;
 
     auto result()()
     {
@@ -579,6 +564,7 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             strEnd = cast(const(ubyte)*) input.ptr + input.length;
             enum bool prepareInput = false;
         }
+
         data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
         dataPtr = data.ptr;
 
@@ -650,78 +636,60 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
         return retCode;
 ///////////
 
-        switch (state)
+    key:
+        if (!skipSpaces)
+            goto vObject_unexpectedEnd; // TODO
+    key_start:
+        if (*strPtr != '"')
+            goto vObject_unexpectedValue; // TODO
+        currIsKey = true;
+        stringAndNumberShift = dataPtr;
+        // reserve 1 byte for the length
+        dataPtr += 1;
+        goto string;
+    next:
+        if (stack.length == 0)
+            goto ret;
         {
-        default: assert(0);
-        key:
             if (!skipSpaces)
-                goto vObject_unexpectedEnd; // TODO
-        key_start:
-            if (*strPtr != '"')
-                goto vObject_unexpectedValue; // TODO
-            currIsKey = true;
-            stringAndNumberShift = dataPtr;
-            // reserve 4 byte for the length
-            dataPtr += 1;
-            goto string;
-
-        // first_object_element:
-        //     if (!skipSpaces)
-        //         goto vValue_unexpectedEnd; // TODO
-        //     if (*strPtr != '}')
-        //         goto key_start;
-        //     strPtr++;
-        //    goto structure_end;
-        // first_array_element:
-        //     if (!skipSpaces)
-        //         goto vValue_unexpectedEnd; // TODO
-        //     if (*strPtr != ']')
-        //         goto value_start;
-        //     strPtr++;
-        //     goto structure_end;
-        next:
-            if (stack.length == 0)
-                goto ret;
+                goto vArray_unexpectedEnd; // TODO: proper error
+            stackValue = stack.top;
+            const isObject = stackValue & 1;
+            auto v = *strPtr++;
+            if (isObject)
             {
-                if (!skipSpaces)
-                    goto vArray_unexpectedEnd; // TODO: proper error
-                stackValue = stack.top;
-                const isObject = stackValue & 1;
-                auto v = *strPtr++;
-                if (isObject)
-                {
-                    if (v == ',')
-                        goto key;
-                    if (v != '}')
-                        goto vObject_unexpectedValue;
-                }
-                else
-                {
-                    if (v == ',')
-                        goto value;
-                    if (v != ']')
-                        goto vArray_unexpectedValue;
-                }
+                if (v == ',')
+                    goto key;
+                if (v != '}')
+                    goto vObject_unexpectedValue;
             }
-        structure_end: {
-            stackValue = stack.pop(*allocator);
-            const structureShift = stackValue >> 1;
-            const structureLengthPtr = data.ptr + structureShift;
-            const size_t structureLength = dataPtr - structureLengthPtr - 4;
-            if (structureLength > uint.max)
-                goto vArray_unexpectedValue; //TODO: proper error
-            version(X86_Any)
-                *cast(uint*) structureLengthPtr = cast(uint) structureLength;
             else
-                static assert(0);
-            goto next;
-        }
-        value:
-            if (!skipSpaces)
-                goto vValue_unexpectedEnd;
-        value_start:
-            switch(*strPtr)
             {
+                if (v == ',')
+                    goto value;
+                if (v != ']')
+                    goto vArray_unexpectedValue;
+            }
+        }
+    structure_end: {
+        stackValue = stack.pop(*allocator);
+        const structureShift = stackValue >> 1;
+        const structureLengthPtr = data.ptr + structureShift;
+        const size_t structureLength = dataPtr - structureLengthPtr - 4;
+        if (structureLength > uint.max)
+            goto vArray_unexpectedValue; //TODO: proper error
+        version(X86_Any)
+            *cast(uint*) structureLengthPtr = cast(uint) structureLength;
+        else
+            static assert(0);
+        goto next;
+    }
+    value:
+        if (!skipSpaces)
+            goto vValue_unexpectedEnd;
+    value_start:
+        switch(*strPtr)
+        {
             stringValue:
             case '"':
                 currIsKey = false;
@@ -907,153 +875,153 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
             default :
                 import std.conv;
                 assert(0, strPtr[0].to!string);
-            }
+        }
 
-        // key:
-        // 	currIsKey = true;
-        // 	stringAndNumberShift = shift;
-        // 	shift += 1;
-        // 	goto string;
+    // key:
+    // 	currIsKey = true;
+    // 	stringAndNumberShift = shift;
+    // 	shift += 1;
+    // 	goto string;
 
-        string:
-            assert(*strPtr == '"');
-            strPtr += 1;
+    string:
+        assert(*strPtr == '"');
+        strPtr += 1;
 
-        StringLoop: {
-            for(;;)
+    StringLoop: {
+        for(;;)
+        {
+            if (strEnd == strPtr && !prepareInput)
+                goto vString_unexpectedEnd;
+            version(SSE42)
             {
-                if (strEnd == strPtr && !prepareInput)
-                    goto vString_unexpectedEnd;
-                version(SSE42)
+                while (strEnd >= strPtr + 16)
                 {
-                    while (strEnd >= strPtr + 16)
-                    {
-                        byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
-                        size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
-                        storeUnaligned!ubyte16(str1, dataPtr);
-                        strPtr += ecx;
-                        dataPtr += ecx;
-                        if(ecx != 16)
-                            goto string_found;
-                    }
-                }
-                while(strEnd >= strPtr + 4)
-                {
-                    char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
-                    char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
-                    char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
-                    char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
-                    strPtr += 4;         dataPtr[-1] = c3;
-                }
-                while(strEnd > strPtr)
-                {
-                    char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto string_found; dataPtr[0] = c0;
-                    strPtr += 1;
-                    dataPtr += 1;
+                    byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                    size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
+                    storeUnaligned!ubyte16(str1, dataPtr);
+                    strPtr += ecx;
+                    dataPtr += ecx;
+                    if(ecx != 16)
+                        goto string_found;
                 }
             }
+            while(strEnd >= strPtr + 4)
+            {
+                char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
+                char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
+                char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
+                char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
+                strPtr += 4;         dataPtr[-1] = c3;
+            }
+            while(strEnd > strPtr)
+            {
+                char c0 = strPtr[0]; if (!isPlainJsonCharacter(c0)) goto string_found; dataPtr[0] = c0;
+                strPtr += 1;
+                dataPtr += 1;
+            }
+        }
         string_found3: dataPtr++; strPtr++;
         string_found2: dataPtr++; strPtr++;
         string_found1: dataPtr++; strPtr++;
         string_found0: dataPtr -= 4;
         string_found:
-    
-            uint c = strPtr[0];
-            if (c == '\"')
+
+        uint c = strPtr[0];
+        if (c == '\"')
+        {
+            strPtr += 1;
+            if (currIsKey)
             {
-                strPtr += 1;
-                if (currIsKey)
-                {
-                    auto stringLength = dataPtr - stringAndNumberShift - 1;
-                    if (stringLength > ubyte.max)
-                        goto vNull_unexpectedValue; // TODO: replace proper error
-                    *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
-                    if (!skipSpaces)
-                        goto vArray_unexpectedEnd; // TODO: proper error
-                    if (*strPtr != ':')
-                        goto vObject_unexpectedValue; // TODO: proper error
-                    strPtr++;
-                    goto value;
-                }
-                else
-                {
-                    auto stringLength = dataPtr - stringAndNumberShift - 4;
-                    if (stringLength > uint.max)
-                        goto vNull_unexpectedValue; // TODO: replace proper error
-                    version(X86_Any)
-                        *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
-                    else
-                        static assert(0);
-                    goto next;
-                }
+                auto stringLength = dataPtr - stringAndNumberShift - 1;
+                if (stringLength > ubyte.max)
+                    goto vNull_unexpectedValue; // TODO: replace proper error
+                *cast(ubyte*)stringAndNumberShift = cast(ubyte) stringLength;
+                if (!skipSpaces)
+                    goto vArray_unexpectedEnd; // TODO: proper error
+                if (*strPtr != ':')
+                    goto vObject_unexpectedValue; // TODO: proper error
+                strPtr++;
+                goto value;
             }
-            if (c == '\\')
+            else
             {
-                strPtr += 1;
-                if (strEnd == strPtr && !prepareInput)
-                    goto vString_unexpectedEnd;
-                c = strPtr[0];
-                strPtr += 1;
-                switch(c)
-                {
-                    case '/' :           goto backSlashReplace;
-                    case '\"':           goto backSlashReplace;
-                    case '\\':           goto backSlashReplace;
-                    case 'b' : c = '\b'; goto backSlashReplace;
-                    case 'f' : c = '\f'; goto backSlashReplace;
-                    case 'n' : c = '\n'; goto backSlashReplace;
-                    case 'r' : c = '\r'; goto backSlashReplace;
-                    case 't' : c = '\t'; goto backSlashReplace;
-                    backSlashReplace:
-                        *dataPtr++ = cast(ubyte) c;
-                        goto StringLoop;
-                    case 'u' :
-                        uint wur = void;
-                        dchar d = void;
-                        if (auto r = (readUnicode(d)))
+                auto stringLength = dataPtr - stringAndNumberShift - 4;
+                if (stringLength > uint.max)
+                    goto vNull_unexpectedValue; // TODO: replace proper error
+                version(X86_Any)
+                    *cast(uint*)stringAndNumberShift = cast(uint) stringLength;
+                else
+                    static assert(0);
+                goto next;
+            }
+        }
+        if (c == '\\')
+        {
+            strPtr += 1;
+            if (strEnd == strPtr && !prepareInput)
+                goto vString_unexpectedEnd;
+            c = strPtr[0];
+            strPtr += 1;
+            switch(c)
+            {
+                case '/' :           goto backSlashReplace;
+                case '\"':           goto backSlashReplace;
+                case '\\':           goto backSlashReplace;
+                case 'b' : c = '\b'; goto backSlashReplace;
+                case 'f' : c = '\f'; goto backSlashReplace;
+                case 'n' : c = '\n'; goto backSlashReplace;
+                case 'r' : c = '\r'; goto backSlashReplace;
+                case 't' : c = '\t'; goto backSlashReplace;
+                backSlashReplace:
+                    *dataPtr++ = cast(ubyte) c;
+                    goto StringLoop;
+                case 'u' :
+                    uint wur = void;
+                    dchar d = void;
+                    if (auto r = (readUnicode(d)))
+                    {
+                        if (r == 1)
+                            goto vString_unexpectedEnd;
+                        goto vString_unexpectedValue;
+                    }
+                    if (_expect(0xD800 <= d && d <= 0xDFFF, false))
+                    {
+                        if (d >= 0xDC00)
+                            goto vString_unexpectedValue;
+                        if (strEnd == strPtr && !prepareInput)
+                            goto vString_unexpectedEnd;
+                        if (*strPtr++ != '\\')
+                            goto vString_unexpectedValue;
+                        if (strEnd == strPtr && !prepareInput)
+                            goto vString_unexpectedEnd;
+                        if (*strPtr++ != 'u')
+                            goto vString_unexpectedValue;
+                        d = (d & 0x3FF) << 10;
+                        dchar trailing;
+                        if (auto r = (readUnicode(trailing)))
                         {
                             if (r == 1)
                                 goto vString_unexpectedEnd;
                             goto vString_unexpectedValue;
                         }
-                        if (_expect(0xD800 <= d && d <= 0xDFFF, false))
+                        if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
+                            goto vString_unexpectedValue;
                         {
-                            if (d >= 0xDC00)
-                                goto vString_unexpectedValue;
-                            if (strEnd == strPtr && !prepareInput)
-                                goto vString_unexpectedEnd;
-                            if (*strPtr++ != '\\')
-                                goto vString_unexpectedValue;
-                            if (strEnd == strPtr && !prepareInput)
-                                goto vString_unexpectedEnd;
-                            if (*strPtr++ != 'u')
-                                goto vString_unexpectedValue;
-                            d = (d & 0x3FF) << 10;
-                            dchar trailing;
-                            if (auto r = (readUnicode(trailing)))
-                            {
-                                if (r == 1)
-                                    goto vString_unexpectedEnd;
-                                goto vString_unexpectedValue;
-                            }
-                            if (!(0xDC00 <= trailing && trailing <= 0xDFFF))
-                                goto vString_unexpectedValue;
-                            {
-                                d |= trailing & 0x3FF;
-                                d += 0x10000;
-                            }
+                            d |= trailing & 0x3FF;
+                            d += 0x10000;
                         }
-                        if (0xFDD0 <= d && d <= 0xFDEF)
-                            goto vString_unexpectedEnd; // TODO: review
-                        if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
-                            goto vString_unexpectedEnd; // TODO: review 
-                        encodeUTF8(d, dataPtr);
-                        goto StringLoop;
-                    default: goto vString_unexpectedValue;
-                }
+                    }
+                    if (0xFDD0 <= d && d <= 0xFDEF)
+                        goto vString_unexpectedEnd; // TODO: review
+                    if (((~0xFFFF & d) >> 0x10) <= 0x10 && (0xFFFF & d) >= 0xFFFE)
+                        goto vString_unexpectedEnd; // TODO: review 
+                    encodeUTF8(d, dataPtr);
+                    goto StringLoop;
+                default: goto vString_unexpectedValue;
             }
-            goto vString_unexpectedValue;
-        }}
+        }
+        goto vString_unexpectedValue;
+    }
 
     ret_error:
         dataLength = dataPtr - data.ptr;
@@ -1062,21 +1030,21 @@ package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeV
     unexpectedEnd: retCode = AsdfErrorCode.unexpectedEnd; goto ret_error;
     unexpectedValue: retCode = AsdfErrorCode.unexpectedValue; goto ret_error;
 
-    vValue_unexpectedEnd : state = State.vValue ; goto unexpectedEnd;
-    vString_unexpectedEnd: state = State.vString; goto unexpectedEnd;
-    vArray_unexpectedEnd : state = State.vArray ; goto unexpectedEnd;
-    vObject_unexpectedEnd: state = State.vObject; goto unexpectedEnd;
+    vValue_unexpectedEnd : goto unexpectedEnd;
+    vString_unexpectedEnd: goto unexpectedEnd;
+    vArray_unexpectedEnd : goto unexpectedEnd;
+    vObject_unexpectedEnd: goto unexpectedEnd;
 
-    vString_unexpectedValue: state = State.vString; goto unexpectedValue;
-    vArray_unexpectedValue : state = State.vArray ; goto unexpectedValue;
-    vObject_unexpectedValue: state = State.vObject; goto unexpectedValue;
+    vString_unexpectedValue: goto unexpectedValue;
+    vArray_unexpectedValue : goto unexpectedValue;
+    vObject_unexpectedValue: goto unexpectedValue;
 
-    vTrue_unexpectedEnd : state = State.vTrue ; goto unexpectedEnd;
-    vFalse_unexpectedEnd: state = State.vFalse; goto unexpectedEnd;
-    vNull_unexpectedEnd : state = State.vNull ; goto unexpectedEnd;
-    vTrue_unexpectedValue : state = State.vTrue ; goto unexpectedValue;
-    vFalse_unexpectedValue: state = State.vFalse; goto unexpectedValue;
-    vNull_unexpectedValue : state = State.vNull ; goto unexpectedValue;
+    vTrue_unexpectedEnd : goto unexpectedEnd;
+    vFalse_unexpectedEnd: goto unexpectedEnd;
+    vNull_unexpectedEnd : goto unexpectedEnd;
+    vTrue_unexpectedValue : goto unexpectedValue;
+    vFalse_unexpectedValue: goto unexpectedValue;
+    vNull_unexpectedValue : goto unexpectedValue;
 
     }
 }
