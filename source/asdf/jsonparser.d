@@ -71,7 +71,7 @@ Asdf parseJson(
     import std.conv: ConvException;
     enum assumeValid = false;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
     auto err = parser.parse;
     return Asdf(parser.result);
 }
@@ -102,7 +102,7 @@ Asdf parseJson(
     )
     (in char[] str, Allocator allocator)
 {
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
     parser.parse();
     return Asdf(parser.result);
 }
@@ -117,7 +117,7 @@ Asdf parseJson(
 {
     import std.experimental.allocator;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParserNew!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
     parser.parse();
     return Asdf(parser.result);
 }
@@ -144,7 +144,7 @@ auto parseJsonByLine(
     (Input input)
 {
     import std.experimental.allocator.gc_allocator;
-    alias Parser = JsonParserNew!(false, cast(bool)spaces, false, shared GCAllocator, Input);
+    alias Parser = JsonParser!(false, cast(bool)spaces, false, shared GCAllocator, Input);
     static struct ByLineValue
     {
         private Parser parser;
@@ -429,7 +429,7 @@ unittest
     assert(stack.length == 0);
 }
 
-package struct JsonParserNew(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
+package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
 {
 
     ubyte[] data;
