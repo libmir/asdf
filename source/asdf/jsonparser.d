@@ -429,7 +429,8 @@ unittest
     assert(stack.length == 0);
 }
 
-package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
+///
+struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])
 {
 
     ubyte[] data;
@@ -440,6 +441,8 @@ package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeVali
     else
         alias front = input;
     size_t dataLength;
+
+    string _lastError;
 
     enum bool chunked = !is(Input : const(char)[]);
 
@@ -506,6 +509,11 @@ package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeVali
     auto result()()
     {
         return data[0 .. dataLength];
+    }
+
+    string lastError()() @property
+    {
+        return _lastError;
     }
 
     pragma(inline, false)
@@ -652,7 +660,7 @@ package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeVali
             goto ret;
         {
             if (!skipSpaces)
-                goto    next_unexpectedEnd;
+                goto next_unexpectedEnd;
             stackValue = stack.top;
             const isObject = stackValue & 1;
             auto v = *strPtr++;
@@ -661,14 +669,14 @@ package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeVali
                 if (v == ',')
                     goto key;
                 if (v != '}')
-                    goto object_unexpectedValue;
+                    goto next_unexpectedValue;
             }
             else
             {
                 if (v == ',')
                     goto value;
                 if (v != ']')
-                    goto    array_unexpectedValue;
+                    goto next_unexpectedValue;
             }
         }
     structure_end: {
@@ -1019,25 +1027,83 @@ package struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeVali
         dataLength = dataPtr - data.ptr;
         stack.free(*allocator);
         goto ret_final;
-    unexpectedEnd: retCode = AsdfErrorCode.unexpectedEnd; goto ret_error;
-    unexpectedValue: retCode = AsdfErrorCode.unexpectedValue; goto ret_error;
-
-    value_unexpectedEnd : goto unexpectedEnd;
-    string_unexpectedEnd: goto unexpectedEnd;
-    array_unexpectedEnd : goto unexpectedEnd;
-    object_unexpectedEnd: goto unexpectedEnd;
-
-    string_unexpectedValue: goto unexpectedValue;
-    array_unexpectedValue : goto unexpectedValue;
-    object_unexpectedValue: goto unexpectedValue;
-
-    true_unexpectedEnd : goto unexpectedEnd;
-    false_unexpectedEnd: goto unexpectedEnd;
-    null_unexpectedEnd : goto unexpectedEnd;
-    true_unexpectedValue : goto unexpectedValue;
-    false_unexpectedValue: goto unexpectedValue;
-    null_unexpectedValue : goto unexpectedValue;
-
+    unexpectedEnd:
+        retCode = AsdfErrorCode.unexpectedEnd;
+        goto ret_error;
+    unexpectedValue:
+        retCode = AsdfErrorCode.unexpectedValue;
+        goto ret_error;
+    object_key_unexpectedEnd:
+        _lastError = "unexpected end of object key";
+        goto unexpectedEnd;
+    object_key_start_unexpectedValue:
+        _lastError = "expected '\"' when when start parsing object key";
+        goto unexpectedValue;
+    key_is_to_large:
+        _lastError = "key length is limited to 255 characters";
+        goto unexpectedValue;
+    object_or_array_is_to_large:
+        _lastError = "object or array serialized size is limited to 2^32-1";
+        goto unexpectedValue;
+    next_unexpectedEnd:
+        stackValue = stack.top;
+        _lastError = (stackValue & 1) ? "unexpected end when parsing object" : "unexpected end when parsing array";
+        goto unexpectedEnd;
+    next_unexpectedValue:
+        stackValue = stack.top;
+        _lastError = (stackValue & 1) ? "expected ',' or `}` when parsing object" : "expected ',' or `]` when parsing array";
+        goto unexpectedValue;
+    value_unexpectedEnd:
+        _lastError = "unexpected end when start parsing JSON value";
+        goto unexpectedEnd;
+    number_length_unexpectedValue:
+        _lastError = "number length is limited to 255 characters";
+        goto unexpectedValue;
+    object_first_value_start_unexpectedEnd:
+        _lastError = "unexpected end of input data after '{'";
+        goto unexpectedEnd;
+    array_first_value_start_unexpectedEnd:
+        _lastError = "unexpected end of input data after '['";
+        goto unexpectedEnd;
+    false_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'false'";
+        goto unexpectedEnd;
+    false_unexpectedValue:
+        _lastError = "unexpected character when parsing 'false'";
+        goto unexpectedValue;
+    null_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'null'";
+        goto unexpectedEnd;
+    null_unexpectedValue:
+        _lastError = "unexpected character when parsing 'null'";
+        goto unexpectedValue;
+    true_unexpectedEnd:
+        _lastError = "unexpected end when parsing 'true'";
+        goto unexpectedEnd;
+    true_unexpectedValue:
+        _lastError = "unexpected character when parsing 'true'";
+        goto unexpectedValue;
+    string_unexpectedEnd:
+        _lastError = "unexpected end when parsing string";
+        goto unexpectedEnd;
+    string_unexpectedValue:
+        _lastError = "unexpected character when parsing string";
+        goto unexpectedValue;
+    failed_to_read_after_key:
+        _lastError = "unexpected end after object key";
+        goto unexpectedEnd;
+    unexpected_character_after_key:
+        _lastError = "unexpected character after key";
+        goto unexpectedValue;
+    string_length_is_too_large:
+        _lastError = "string size is limited to 2^32-1";
+        goto unexpectedValue;
+    invalid_trail_surrogate:
+        _lastError = "invalid UTF-16 trail surrogate";
+        goto unexpectedValue;
+    invalid_utf_value:
+        _lastError = "invalid UTF value";
+        goto unexpectedValue;
     }
 }
 
