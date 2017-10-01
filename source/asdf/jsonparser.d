@@ -73,7 +73,7 @@ Asdf parseJson(
     import std.experimental.allocator.gc_allocator;
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
     if (parser.parse)
-        throw new Exception(parser.lastError);
+        throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -105,7 +105,7 @@ Asdf parseJson(
 {
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, Allocator, const(char)[])(allocator, str);
     if (parser.parse)
-        throw new Exception(parser.lastError);
+        throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -121,7 +121,7 @@ Asdf parseJson(
     import std.experimental.allocator.gc_allocator;
     auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
     if (parser.parse)
-        throw new Exception(parser.lastError);
+        throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
 }
 
@@ -186,7 +186,7 @@ auto parseJsonByLine(
                 }
             }
             if (error)
-                throw new Exception(parser.lastError);
+                throw new AsdfException(parser.lastError);
             parser.skipLine;
             _nextEmpty = parser.prepareInput_;
         }
