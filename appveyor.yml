@@ -61,4 +61,4 @@ test_script:
  - echo %PATH%
  - dub fetch mir-cpuid
  - dub test --arch %Darch% --build=unittest-cov
- - dub test --arch %Darch% --build=unittest-release
+ - dub test --arch %Darch% --build=unittest
