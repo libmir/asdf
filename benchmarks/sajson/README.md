@@ -27,5 +27,5 @@ clang++ -O3 -march=native -std=c++14 benchmark/benchmark.cpp -Iinclude
 | svg_menu | 2 μs | 1 μs | 100 % |
 | truenull | 18 μs | 17 μs | 6 % |
 | twitter | 919 μs | 626 μs | 47 % |
-| update-center μs | 838 μs | 531 | 58 % |
+| update-center | 838 μs | 531 μs | 58 % |
 | whitespace | 9 μs | 8 μs | 13 % |
