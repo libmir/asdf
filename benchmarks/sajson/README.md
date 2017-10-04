@@ -16,7 +16,7 @@ clang++ -O3 -march=native -std=c++14 benchmark/benchmark.cpp -Iinclude
 
 ### Results
 
-| Test | Avg ASDF t | Avg sajson t | Speedup |
+| Test | Avg sajson t | Avg ASDF t | Speedup |
 |---|---|---|---|
 | apache_builds | 142 μs | 119 μs | 19 % |
 | github_events | 78 μs | 64 μs | 22 % |
