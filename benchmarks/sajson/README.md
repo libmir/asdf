@@ -1,7 +1,4 @@
-[sajson](https://github.com/chadaustin/sajson) Benchmark
-===================
-
-## Benchmark: ASDF vs sajson
+## Benchmark: ASDF vs [sajson](https://github.com/chadaustin/sajson) Benchmark
 
 ### Platform
 Intel Haswell (AVX2),
