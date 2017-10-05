@@ -551,9 +551,9 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         ubyte* stringAndNumberShift = void;
         static if (chunked)
         {
-            pragma(inline, false)
             bool prepareInput()()
             {
+                pragma(inline, false);
                 if(strPtr)
                 {
                     input.popFront;
@@ -592,9 +592,11 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
         data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
         dataPtr = data.ptr;
-        pragma(inline, true)
+
         bool skipSpaces()()
         {
+            version(LDC)
+                pragma(inline, true);
             static if (includingNewLine)
                 alias isWhite = isJsonWhitespace;
             else
@@ -624,10 +626,11 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
         }
 
-        pragma(inline, true)
         @minsize
         int readUnicode()(ref dchar d)
         {
+            version(LDC)
+                pragma(inline, true);
             uint e = 0;
             size_t i = 4;
             do
