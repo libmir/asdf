@@ -464,10 +464,11 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         {
             if (front.length == 0)
             {
+                assert(!input.empty);
+                input.popFront;
                 if (input.empty)
                     return false;
                 front = cast(typeof(front)) input.front;
-                input.popFront;
             }
         }
         return front.length != 0;
@@ -553,27 +554,30 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             pragma(inline, false)
             bool prepareInput()()
             {
+                if(strPtr)
+                {
+                    input.popFront;
                     if (input.empty)
                     {
                         return false;
                     }
-                    front = cast(typeof(front)) input.front;
-                    input.popFront;
-                    if (front.length == 0)
-                        return false;
-                    strPtr = front.ptr;
-                    strEnd = front.ptr + front.length;
-                    const dataAddLength = front.length * 6;
-                    const dataLength = dataPtr - data.ptr;
-                    const dataRequiredLength = dataLength + dataAddLength;
-                    if (data.length < dataRequiredLength)
-                    {
-                        const valueLength = stringAndNumberShift - dataPtr;
-                        import std.algorithm.comparison: max;
-                        allocator.reallocate(*cast(void[]*)&data, max(data.length * 2, dataRequiredLength));
-                        dataPtr = data.ptr + dataLength;
-                        stringAndNumberShift = dataPtr + valueLength;
-                    }
+                }
+                front = cast(typeof(front)) input.front;
+                if (front.length == 0)
+                    return false;
+                strPtr = front.ptr;
+                strEnd = front.ptr + front.length;
+                const dataAddLength = front.length * 6;
+                const dataLength = dataPtr - data.ptr;
+                const dataRequiredLength = dataLength + dataAddLength;
+                if (data.length < dataRequiredLength)
+                {
+                    const valueLength = stringAndNumberShift - dataPtr;
+                    import std.algorithm.comparison: max;
+                    allocator.reallocate(*cast(void[]*)&data, max(data.length * 2, dataRequiredLength));
+                    dataPtr = data.ptr + dataLength;
+                    stringAndNumberShift = dataPtr + valueLength;
+                }
                 return true;
             }
             strPtr = front.ptr;
@@ -588,7 +592,6 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
         data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
         dataPtr = data.ptr;
-
         pragma(inline, true)
         bool skipSpaces()()
         {
@@ -606,7 +609,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                         if (isWhite(strPtr[0]))
                         {
                             strPtr++;
-                                goto F;
+                            goto F;
                         }
                     }
                     return true;
@@ -729,8 +732,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 *dataPtr++ = Asdf.Kind.number;
                 stringAndNumberShift = dataPtr;
                 // reserve 1 byte for the length
-                dataPtr++;
-                // write the first character
+                dataPtr++; // write the first character
                 *dataPtr++ = *strPtr++;
                 for(;;)
                 {
@@ -749,13 +751,16 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                                 goto number_found;
                         }
                     }
-                    while(strEnd >= strPtr + 4)
+                    else
                     {
-                        char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto number_found0;
-                        char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isJsonNumber(c1)) goto number_found1;
-                        char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isJsonNumber(c2)) goto number_found2;
-                        char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isJsonNumber(c3)) goto number_found3;
-                        strPtr += 4;         dataPtr[-1] = c3;
+                        while(strEnd >= strPtr + 4)
+                        {
+                            char c0 = strPtr[0]; dataPtr += 4;     if (!isJsonNumber(c0)) goto number_found0;
+                            char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isJsonNumber(c1)) goto number_found1;
+                            char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isJsonNumber(c2)) goto number_found2;
+                            char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isJsonNumber(c3)) goto number_found3;
+                            strPtr += 4;         dataPtr[-1] = c3;
+                        }
                     }
                     while(strEnd > strPtr)
                     {
@@ -764,10 +769,13 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                         dataPtr += 1;
                     }
                 }
-            number_found3: dataPtr++; strPtr++;
-            number_found2: dataPtr++; strPtr++;
-            number_found1: dataPtr++; strPtr++;
-            number_found0: dataPtr -= 4;
+            version(SSE42){} else
+            {
+                number_found3: dataPtr++; strPtr++;
+                number_found2: dataPtr++; strPtr++;
+                number_found1: dataPtr++; strPtr++;
+                number_found0: dataPtr -= 4;
+            }
             number_found:
 
                 auto numberLength = dataPtr - stringAndNumberShift - 1;
@@ -923,13 +931,16 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                         goto string_found;
                 }
             }
-            while(strEnd >= strPtr + 4)
+            else
             {
-                char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
-                char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
-                char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
-                char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
-                strPtr += 4;         dataPtr[-1] = c3;
+                while(strEnd >= strPtr + 4)
+                {
+                    char c0 = strPtr[0]; dataPtr += 4;     if (!isPlainJsonCharacter(c0)) goto string_found0;
+                    char c1 = strPtr[1]; dataPtr[-4] = c0; if (!isPlainJsonCharacter(c1)) goto string_found1;
+                    char c2 = strPtr[2]; dataPtr[-3] = c1; if (!isPlainJsonCharacter(c2)) goto string_found2;
+                    char c3 = strPtr[3]; dataPtr[-2] = c2; if (!isPlainJsonCharacter(c3)) goto string_found3;
+                    strPtr += 4;         dataPtr[-1] = c3;
+                }
             }
             while(strEnd > strPtr)
             {
@@ -938,10 +949,13 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 dataPtr += 1;
             }
         }
-        string_found3: dataPtr++; strPtr++;
-        string_found2: dataPtr++; strPtr++;
-        string_found1: dataPtr++; strPtr++;
-        string_found0: dataPtr -= 4;
+        version(SSE42) {} else
+        {
+            string_found3: dataPtr++; strPtr++;
+            string_found2: dataPtr++; strPtr++;
+            string_found1: dataPtr++; strPtr++;
+            string_found0: dataPtr -= 4;
+        }
         string_found:
 
         uint c = strPtr[0];
@@ -1211,16 +1225,36 @@ unittest
     assert(data == parseJson(str));
 }
 
+version(unittest) immutable string test_data =
+q{{
+  "coordinates": [
+    {
+      "x": 0.29811521136061625,
+      "y": 0.47980763779335556,
+      "z": 0.1704431616620138,
+      "name": "tqxvsg 2780",
+      "opts": {
+        "1": [
+          1,
+          true
+        ]
+      }
+    }
+  ],
+  "info": "some info"
+}
+};
+
 unittest
 {
+    import std.algorithm.iteration: map;
     import std.string;
     import std.range;
     import std.conv;
-    static immutable str = `941763918276349812734691287354912873459128635412037501236410234567123847512983745126`;
-    assert(str == parseJson(str).to!string);
-    foreach(i; 1 .. str.length)
+    auto a = parseJson(test_data);
+    ubyte[test_data.length] buff; // simulates File.byChunk behavior
+    foreach(i; 1 .. test_data.length)
     {
-        assert(str == parseJson(str.representation.chunks(i)).to!string);
-
+        assert(a == parseJson(test_data.representation.chunks(i).map!((front => buff[0 .. front.length] = front))));
     }
 }
