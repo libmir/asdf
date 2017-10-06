@@ -999,15 +999,14 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             strPtr += 1;
             switch(c)
             {
-                case '/' :           goto backSlashReplace;
-                case '\"':           goto backSlashReplace;
-                case '\\':           goto backSlashReplace;
-                case 'b' : c = '\b'; goto backSlashReplace;
-                case 'f' : c = '\f'; goto backSlashReplace;
-                case 'n' : c = '\n'; goto backSlashReplace;
-                case 'r' : c = '\r'; goto backSlashReplace;
-                case 't' : c = '\t'; goto backSlashReplace;
-                backSlashReplace:
+                case 'b' : *dataPtr++ = '\b'; goto StringLoop;
+                case 'f' : *dataPtr++ = '\f'; goto StringLoop;
+                case 'n' : *dataPtr++ = '\n'; goto StringLoop;
+                case 'r' : *dataPtr++ = '\r'; goto StringLoop;
+                case 't' : *dataPtr++ = '\t'; goto StringLoop;
+                case '/' :
+                case '\"':
+                case '\\':
                     *dataPtr++ = cast(ubyte) c;
                     goto StringLoop;
                 case 'u' :
