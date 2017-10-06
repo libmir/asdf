@@ -999,16 +999,16 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             strPtr += 1;
             switch(c)
             {
-                case 'b' : *dataPtr++ = '\b'; goto StringLoop;
-                case 'f' : *dataPtr++ = '\f'; goto StringLoop;
-                case 'n' : *dataPtr++ = '\n'; goto StringLoop;
-                case 'r' : *dataPtr++ = '\r'; goto StringLoop;
-                case 't' : *dataPtr++ = '\t'; goto StringLoop;
                 case '/' :
                 case '\"':
                 case '\\':
                     *dataPtr++ = cast(ubyte) c;
                     goto StringLoop;
+                case 'b' : *dataPtr++ = '\b'; goto StringLoop;
+                case 'f' : *dataPtr++ = '\f'; goto StringLoop;
+                case 'n' : *dataPtr++ = '\n'; goto StringLoop;
+                case 'r' : *dataPtr++ = '\r'; goto StringLoop;
+                case 't' : *dataPtr++ = '\t'; goto StringLoop;
                 case 'u' :
                     uint wur = void;
                     dchar d = void;
