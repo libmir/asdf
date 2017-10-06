@@ -592,7 +592,14 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             enum bool prepareInput = false;
         }
 
-        data = cast(ubyte[])allocator.allocate((strEnd - strPtr) * 6);
+        auto rl = (strEnd - strPtr) * 6;
+        if (data.ptr !is null && data.length < rl)
+        {
+            allocator.deallocate(data);
+            data = null;
+        }
+        if (data.ptr is null)
+            data = cast(ubyte[])allocator.allocate(rl);
         dataPtr = data.ptr;
 
         bool skipSpaces()()
