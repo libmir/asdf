@@ -336,8 +336,9 @@ bool isJsonNumber()(size_t c)
 /+
 Fast picewise stack
 +/
-private struct Stack(Allocator)
+private struct Stack
 {
+    import core.stdc.stdlib: malloc, free;
     @disable this(this);
 
     struct Node
@@ -351,7 +352,7 @@ private struct Stack(Allocator)
     size_t length = 0;
     Node node;
 
-    void push()(size_t value, ref Allocator allocator)
+    void push()(size_t value)
     {
         version(LDC) 
             pragma(inline, true);
@@ -368,10 +369,10 @@ private struct Stack(Allocator)
         }
         else
         {
-            auto prevNode = cast(Node*) allocator.allocate(Node.sizeof).ptr;
+            auto prevNode = cast(Node*) malloc(Node.sizeof);
             *prevNode = node;
             node.prev = prevNode;
-            node.buff = cast(size_t*) allocator.allocate(Node.length * size_t.sizeof).ptr;
+            node.buff = cast(size_t*) malloc(Node.length * size_t.sizeof);
             node.buff[0] = value;
         }
     }
@@ -385,7 +386,7 @@ private struct Stack(Allocator)
         return node.buff[local];
     }
 
-    size_t pop()(ref Allocator allocator)
+    size_t pop()()
     {
         version(LDC) 
             pragma(inline, true);
@@ -396,7 +397,7 @@ private struct Stack(Allocator)
         {
             if (node.buff != buffer.ptr)
             {
-                allocator.deallocate(node.buff[0 .. Node.length]);
+                free(node.buff);
                 node = *node.prev;
             }
         }
@@ -404,13 +405,15 @@ private struct Stack(Allocator)
     }
 
     pragma(inline, false)
-    void free()(ref Allocator allocator)
+    void free()()
     {
+        version(LDC) 
+            pragma(inline, true);
         if (node.buff is null)
             return;
         while(node.buff !is buffer.ptr)
         {
-            allocator.deallocate(node.buff[0 .. Node.length]);
+            free(node.buff);
             node = *node.prev;
         }
     }
@@ -418,19 +421,18 @@ private struct Stack(Allocator)
 
 unittest
 {
-    import std.experimental.allocator.mallocator;
-    Stack!(shared Mallocator) stack;
+    Stack stack;
     assert(stack.length == 0);
     foreach(i; 1 .. 100)
     {
-        stack.push(i, Mallocator.instance);
+        stack.push(i);
         assert(stack.length == i);
         assert(stack.top() == i);
     }
     foreach_reverse(i; 1 .. 100)
     {
         assert(stack.length == i);
-        assert(stack.pop(Mallocator.instance) == i);
+        assert(stack.pop() == i);
     }
     assert(stack.length == 0);
 }
@@ -650,7 +652,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             return 0;
         }
 
-        Stack!Allocator stack;
+        Stack stack;
 
         typeof(return) retCode;
         bool currIsKey = void;
@@ -702,7 +704,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             }
         }
     structure_end: {
-        stackValue = stack.pop(*allocator);
+        stackValue = stack.pop();
         const structureShift = stackValue >> 1;
         const structureLengthPtr = data.ptr + structureShift;
         const size_t structureLength = dataPtr - structureLengthPtr - 4;
@@ -790,7 +792,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             case '{':
                 strPtr++;
                 *dataPtr++ = Asdf.Kind.object;
-                stack.push(((dataPtr - data.ptr) << 1) ^ 1, *allocator);
+                stack.push(((dataPtr - data.ptr) << 1) ^ 1);
                 dataPtr += 4;
                 if (!skipSpaces)
                     goto object_first_value_start_unexpectedEnd;
@@ -801,7 +803,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             case '[':
                 strPtr++;
                 *dataPtr++ = Asdf.Kind.array;
-                stack.push(((dataPtr - data.ptr) << 1) ^ 0, *allocator);
+                stack.push(((dataPtr - data.ptr) << 1) ^ 0);
                 dataPtr += 4;
                 if (!skipSpaces)
                     goto array_first_value_start_unexpectedEnd;
@@ -995,8 +997,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             strPtr += 1;
             if (strEnd == strPtr && !prepareInput)
                 goto string_unexpectedEnd;
-            c = strPtr[0];
-            strPtr += 1;
+            c = *strPtr++;
             switch(c)
             {
                 case '/' :
@@ -1057,7 +1058,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
     ret_error:
         dataLength = dataPtr - data.ptr;
-        stack.free(*allocator);
+        stack.free();
         goto ret_final;
     unexpectedEnd:
         retCode = AsdfErrorCode.unexpectedEnd;
