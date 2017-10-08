@@ -27,7 +27,7 @@ ARTWORK_DIR=$(DOC_SOURCE_DIR)/artwork
 # packages and their modules.
 ASDF_PACKAGES = asdf
 
-PACKAGE_asdf = asdf jsonparser serialization package
+PACKAGE_asdf = asdf jsonparser serialization transform package
 
 MOD_EXCLUDES= $(addprefix --ex=asdf., utility jsonbuffer outputarray simd)
 
