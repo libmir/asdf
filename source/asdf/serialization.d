@@ -234,6 +234,40 @@ unittest
 	assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
 }
 
+/// Support for floating point nan and (partial) infinity
+unittest
+{
+	static struct Foo
+	{
+		float f;
+
+		bool opEquals()(auto ref const(typeof(this)) rhs)
+		{
+			import std.math : isNaN, approxEqual;
+
+			if (f.isNaN && rhs.f.isNaN)
+				return true;
+
+			return approxEqual(f, rhs.f);
+		}
+	}
+
+	// test for Not a Number
+	assert (serializeToJson(Foo()) == `{"f":"nan"}`);
+	assert (serializeToAsdf(Foo()).to!string == `{"f":"nan"}`);
+
+	assert (deserialize!Foo(`{"f":null}`) == Foo());
+	assert (deserialize!Foo(`{"f":"nan"}`) == Foo());
+
+	assert (serializeToJson(Foo(float.infinity)).to!string == `{"f":"inf"}`);
+	assert (serializeToAsdf(Foo(float.infinity)).to!string == `{"f":"inf"}`);
+	assert (deserialize!Foo(`{"f":"inf"}`) == Foo(float.infinity));
+
+	assert (serializeToJson(Foo(-float.infinity)).to!string == `{"f":"-inf"}`);
+	assert (serializeToAsdf(Foo(-float.infinity)).to!string == `{"f":"-inf"}`);
+	assert (deserialize!Foo(`{"f":"-inf"}`) == Foo(-float.infinity));
+}
+
 import std.traits;
 import std.meta;
 import std.range.primitives;
@@ -1167,11 +1201,19 @@ void serializeValue(S, V)(ref S serializer, in V value, FormatSpec!char fmt = Fo
 	static if (isFloatingPoint!V)
 	{
 		import std.math : isNaN, isInfinity;
-		if (isNaN(value) || isInfinity(value))
+		if (isInfinity(value))
 		{
-			serializer.putValue(null);
+			if (value < 0)
+				serializer.putValue("-inf");
+			else
+				serializer.putValue("inf");
 			return;
 		}
+        if (isNaN(value))
+        {
+            serializer.putValue("nan");
+            return;
+        }
 	}
 	
 	serializer.putNumberValue(value, fmt);
@@ -1538,10 +1580,28 @@ void deserializeValue(V)(Asdf data, ref V value)
 
 	static if (isFloatingPoint!V)
 	{
-		if(kind == Asdf.Kind.null_)
+		if (kind == Asdf.Kind.null_)
 		{
 			value = V.nan;
 			return;
+		}
+		if (kind == Asdf.Kind.string)
+		{
+			string v;
+			.deserializeValue(data, v);
+			switch (v)
+			{
+				case "nan":
+					value = V.nan;
+					return;
+				case "inf":
+					value = V.infinity;
+					return;
+				case "-inf":
+					value = -V.infinity;
+					return;
+				default:
+			}
 		}
 	}
 
