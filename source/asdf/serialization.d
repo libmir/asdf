@@ -140,6 +140,100 @@ unittest
 	assert(`{"b":123}`.deserialize!S.str == "123");
 }
 
+/// Support for custom nullable types (types that has a bool property `isNull`,
+/// non-void property `get` returning payload and void property `nullify` that
+/// makes nullable type to null value)
+unittest
+{
+	static struct MyNullable
+	{
+		long value;
+
+		@property
+		isNull() const
+		{
+			return value == 0;
+		}
+
+		@property
+		get()
+		{
+			return value;
+		}
+
+		@property
+		nullify()
+		{
+			value = 0;
+		}
+
+		auto opAssign(long value)
+		{
+			this.value = value;
+		}
+	}
+
+	static struct Foo
+	{
+		MyNullable my_nullable;
+		string field;
+
+		bool opEquals()(auto ref const(typeof(this)) rhs)
+		{
+			if (my_nullable.isNull && rhs.my_nullable.isNull)
+				return field == rhs.field;
+
+			if (my_nullable.isNull != rhs.my_nullable.isNull)
+				return false;
+
+			return my_nullable == rhs.my_nullable && 
+				         field == rhs.field;
+		}
+	}
+
+	static assert(isNullable!MyNullable);
+
+	Foo foo;
+	foo.field = "it's a foo";
+
+	assert (serializeToJson(foo) == `{"my_nullable":null,"field":"it's a foo"}`);
+
+	foo.my_nullable = 200;
+
+	assert (deserialize!Foo(`{"my_nullable":200,"field":"it's a foo"}`) == Foo(MyNullable(200), "it's a foo"));
+
+	import std.typecons : Nullable;
+	import std.stdio;
+
+	static struct Bar
+	{
+		Nullable!long nullable;
+		string field;
+
+		bool opEquals()(auto ref const(typeof(this)) rhs)
+		{
+			if (nullable.isNull && rhs.nullable.isNull)
+				return field == rhs.field;
+
+			if (nullable.isNull != rhs.nullable.isNull)
+				return false;
+
+			return nullable == rhs.nullable && 
+				         field == rhs.field;
+		}
+	}
+
+	static assert(isNullable!(Nullable!(int)));
+
+	Bar bar;
+	bar.field = "it's a bar";
+
+	assert (serializeToJson(bar) == `{"nullable":null,"field":"it's a bar"}`);
+
+	bar.nullable = 777;
+	assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
+}
+
 import std.traits;
 import std.meta;
 import std.range.primitives;
@@ -1237,9 +1331,21 @@ unittest
 	assert(deserialize!(uint[short])(`{"256":1}`) == cast(uint[short]) [256 : 1]);
 }
 
+/// Nullable type serialization
+void serializeValue(S, N)(ref S serializer, auto ref N value)
+	if (isNullable!N)
+{
+	if(value.isNull)
+	{
+		serializer.putValue(null);
+		return;
+	}
+	serializer.putValue(value.get);
+}
+
 /// Aggregation type serialization
 void serializeValue(S, V)(ref S serializer, auto ref V value)
-	if(isAggregateType!V && !is(V : BigInt))
+	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
 	static if(is(V == class) || is(V == interface))
 	{
@@ -1653,9 +1759,24 @@ unittest
 	assert(deserialize!(int[E])(serializeToAsdf([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
 }
 
+/// Deserialize Nullable value
+void deserializeValue(V)(Asdf data, ref V value)
+	if(isNullable!V)
+{
+	if (data.kind == Asdf.Kind.null_)
+	{
+		value.nullify;
+		return;
+	}
+
+	typeof(value.get) payload;
+	.deserializeValue(data, payload);
+	value = payload;
+}
+
 /// Deserialize aggregate value
 void deserializeValue(V)(Asdf data, ref V value)
-	if(isAggregateType!V && !is(V : BigInt))
+	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
 	static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
 	static if(__traits(compiles, value = V.deserialize(data)))
@@ -2148,5 +2269,26 @@ private template aliasSeqOf(alias range)
 		{
 			static assert(false, "Cannot transform range of type " ~ ArrT.stringof ~ " into a AliasSeq.");
 		}
+	}
+}
+
+private template isNullable(T)
+{
+	import std.traits : hasMember;
+
+	static if (
+		hasMember!(T, "isNull") &&
+		is(typeof(__traits(getMember, T, "isNull")) == bool) &&
+		hasMember!(T, "get") &&
+		!is(typeof(__traits(getMember, T, "get")) == void) &&
+		hasMember!(T, "nullify") &&
+		is(typeof(__traits(getMember, T, "nullify")) == void)
+	)
+	{
+		enum isNullable = true;
+	}
+	else
+	{
+		enum isNullable = false;
 	}
 }
