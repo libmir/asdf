@@ -1164,6 +1164,16 @@ unittest
 void serializeValue(S, V)(ref S serializer, in V value, FormatSpec!char fmt = FormatSpec!char.init)
 	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
+	static if (isFloatingPoint!V)
+	{
+		import std.math : isNaN, isInfinity;
+		if (isNaN(value) || isInfinity(value))
+		{
+			serializer.putValue(null);
+			return;
+		}
+	}
+	
 	serializer.putNumberValue(value, fmt);
 }
 
@@ -1525,6 +1535,16 @@ void deserializeValue(V)(Asdf data, ref V value)
 	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
 	auto kind = data.kind;
+
+	static if (isFloatingPoint!V)
+	{
+		if(kind == Asdf.Kind.null_)
+		{
+			value = V.nan;
+			return;
+		}
+	}
+
 	if(kind != Asdf.Kind.number)
 		throw new DeserializationException(kind);
 	value = (cast(string) data.data[2 .. $]).to!V;
