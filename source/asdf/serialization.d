@@ -1205,6 +1205,38 @@ unittest
 	assert(serializeToJson((uint[string]).init) == `null`);
 }
 
+/// integral typed value associative array serialization
+void serializeValue(S, T, K)(ref S serializer, auto ref T[K] value)
+	if((isIntegral!K) && !is(K == enum))
+{
+	if(value is null)
+	{
+		serializer.putValue(null);
+		return;
+	}
+	char[40] buffer = void;
+	auto state = serializer.objectBegin();
+	foreach (key, ref val; value)
+	{
+		import std.format : sformat;
+		auto str = sformat(buffer[], "%d", key);
+		serializer.putEscapedKey(str);
+		serializer.putValue(val);
+	}
+	serializer.objectEnd(state);
+}
+
+///
+unittest
+{
+	uint[short] ar = [256 : 1];
+	assert(serializeToJson(ar) == `{"256":1}`);
+	ar.remove(256);
+	assert(serializeToJson(ar) == `{}`);
+	assert(serializeToJson((uint[string]).init) == `null`);
+	assert(deserialize!(uint[short])(`{"256":1}`) == cast(uint[short]) [256 : 1]);
+}
+
 /// Aggregation type serialization
 void serializeValue(S, V)(ref S serializer, auto ref V value)
 	if(isAggregateType!V && !is(V : BigInt))
@@ -1587,6 +1619,28 @@ void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
 		default:
 			throw new DeserializationException(kind);
 	}
+}
+
+/// Deserialize enumeration-value associative array
+void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
+    if((isIntegral!K) && !is(K == enum))
+{
+    auto kind = data.kind;
+    with(Asdf.Kind) switch(kind)
+    {
+        case object:
+            foreach(elem; data.byKeyValue)
+            {
+                T v;
+                .deserializeValue(elem.value, v);
+                value[elem.key.to!K] = v;
+            }
+            return;
+        case null_:
+            return;
+        default:
+            throw new DeserializationException(kind);
+    }
 }
 
 ///
