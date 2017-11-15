@@ -190,14 +190,11 @@ auto parseJsonByLine(
                 else
                 {
                     parser.skipNewLine;
-                    _nextEmpty = false;
+                    _nextEmpty = !parser.skipSpaces_;
                     return;
                 }
             }
-            if (error)
-                throw new AsdfException(parser.lastError);
-            parser.skipLine;
-            _nextEmpty = parser.prepareInput_;
+            throw new AsdfException(parser.lastError);
         }
 
         auto front() @property
