@@ -131,6 +131,15 @@ unittest
     assert(`{"ak": {"sub": "subval"} }`.parseJson["ak", "sub"] == "subval");
 }
 
+deprecated("please remove the initBufferLength argument (latest)")
+auto parseJsonByLine(
+    Flag!"spaces" spaces = Yes.spaces,
+    Input)
+    (Input input, sizediff_t initBufferLength)
+{
+    return .parseJsonByLine!(spaces, Input)(input);
+}
+
 /++
 Parses JSON value in each line from a Range of buffers.
 Note: Invalid lines generate an empty ASDF value.
