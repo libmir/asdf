@@ -137,7 +137,7 @@ auto parseJsonByLine(
     Input)
     (Input input, sizediff_t initBufferLength)
 {
-    return .parseJsonByLine!(spaces, Input)(input);
+    return .parseJsonByLine!(spaces,  No.throwOnInvalidLines, Input)(input);
 }
 
 /++
@@ -152,6 +152,7 @@ Returns:
 +/
 auto parseJsonByLine(
     Flag!"spaces" spaces = Yes.spaces,
+    Flag!"throwOnInvalidLines"  throwOnInvalidLines = No.throwOnInvalidLines,
     Input)
     (Input input)
 {
@@ -164,37 +165,43 @@ auto parseJsonByLine(
 
         void popFront()
         {
-            assert(!empty);
-            if(_nextEmpty)
+            for(;;)
             {
-                _empty = true;
-                return;
-            }
-            // parser.oa.shift = 0;
-            parser.dataLength = 0;
-            auto error = parser.parse;
-            if(!error)
-            {
-                auto t = parser.skipSpaces_;
-                if(t != '\n' && t != 0)
+                assert(!empty);
+                if(_nextEmpty)
                 {
-                    error = AsdfErrorCode.unexpectedValue;
-                    parser._lastError = "expected new line or end of input";
-                }
-                else
-                if(t == 0)
-                {
-                    _nextEmpty = true;
+                    _empty = true;
                     return;
                 }
-                else
+                // parser.oa.shift = 0;
+                parser.dataLength = 0;
+                auto error = parser.parse;
+                if(!error)
                 {
-                    parser.skipNewLine;
-                    _nextEmpty = !parser.skipSpaces_;
-                    return;
+                    auto t = parser.skipSpaces_;
+                    if(t != '\n' && t != 0)
+                    {
+                        error = AsdfErrorCode.unexpectedValue;
+                        parser._lastError = "expected new line or end of input";
+                    }
+                    else
+                    if(t == 0)
+                    {
+                        _nextEmpty = true;
+                        return;
+                    }
+                    else
+                    {
+                        parser.skipNewLine;
+                        _nextEmpty = !parser.skipSpaces_;
+                        return;
+                    }
                 }
+                static if (throwOnInvalidLines)
+                    throw new AsdfException(parser.lastError);
+                else
+                    parser.skipLine();
             }
-            throw new AsdfException(parser.lastError);
         }
 
         auto front() @property
@@ -519,7 +526,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
     {
         for(;;)
         {
-            if (prepareInput_ == false)
+            if (_expect(!prepareInput_, false))
                 return false;
             auto c = front[0];
             front = front[1 .. $];
