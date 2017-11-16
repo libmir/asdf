@@ -15,8 +15,6 @@ JSON Objects or to custom data types.
 
 ❗️: Currently all ASDF Method names and all UDAs are in DRAFT state, we might want want make them simpler. Please submit an Issue if you have input.
 
-❗️: when using the filter method invalid records are silently ignored per default. this is a feature, becase throwing an exception may be too expensive
-
 #### Why ASDF?
 
 - ASDF is fast. It can be really helpful if you have gigabytes of JSON line separated values.
