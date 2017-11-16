@@ -8,9 +8,8 @@ void main()
 	foreach(a;
 		File("input.jsonl")
 		.byChunk(4096)
-		.parseJsonByLine(4096)
-		.map!(a => a["colors"])
-		.filter!(a => a.data.length))
+		.parseJsonByLine
+		.map!(a => a["colors"]))
 	{
 		auto elems = a.byElement;
 		auto count = elems.save.count;
