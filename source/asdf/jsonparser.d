@@ -142,17 +142,17 @@ auto parseJsonByLine(
 
 /++
 Parses JSON value in each line from a Range of buffers.
-Note: Invalid lines generate an empty ASDF value.
 Params:
-    chunks = input range composed of elements type of `const(ubyte)[]` or string / const(char)[].
+    spaces = adds support for spaces beetwen json tokens. Default value is Yes.
+    throwOnInvalidLines = throws an $(LREF AsdfException) on invalid lines if Yes and ignore invalid lines if No. Default value is No.
+    input = input range composed of elements type of `const(ubyte)[]` or string / const(char)[].
         `chunks` can use the same buffer for each chunk.
-    initLength = initial output buffer length. Minimal value equals 32.
 Returns:
     Input range composed of ASDF values. Each value uses the same internal buffer.
 +/
 auto parseJsonByLine(
     Flag!"spaces" spaces = Yes.spaces,
-    Flag!"throwOnInvalidLines"  throwOnInvalidLines = No.throwOnInvalidLines,
+    Flag!"throwOnInvalidLines" throwOnInvalidLines = No.throwOnInvalidLines,
     Input)
     (Input input)
 {
