@@ -1220,6 +1220,10 @@ void serializeValue(S, V)(ref S serializer, in V value, FormatSpec!char fmt = Fo
 unittest
 {
 	assert(serializeToJson(BigInt(123)) == `123`);
+	assert(serializeToJson(2.40f) == `2.4`);
+	assert(serializeToJson(float.nan) == `"nan"`);
+	assert(serializeToJson(float.infinity) == `"inf"`);
+	assert(serializeToJson(-float.infinity) == `"-inf"`);
 }
 
 /// Boolean serialization
@@ -1598,7 +1602,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 					value = -V.infinity;
 					return;
 				default:
+					import std.conv : to;
+					value = data.to!V;
 			}
+			return;
 		}
 	}
 
@@ -1616,6 +1623,15 @@ unittest
 	assert(deserialize!double(serializeToJson(20)) == double(20));
 	assert(deserialize!BigInt(serializeToAsdf(20)) == BigInt(20));
 	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
+
+	assert(deserialize!float (serializeToJson ("2.40")) == float (2.40));
+	assert(deserialize!double(serializeToJson ("2.40")) == double(2.40));
+	assert(deserialize!double(serializeToAsdf("-2.40")) == double(-2.40));
+	
+	import std.math : isNaN, isInfinity;
+	assert(deserialize!float (serializeToJson  ("nan")).isNaN);
+	assert(deserialize!float (serializeToJson  ("inf")).isInfinity);
+	assert(deserialize!float (serializeToJson ("-inf")).isInfinity);
 }
 
 /// Deserialize enum value
