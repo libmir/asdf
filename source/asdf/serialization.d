@@ -234,6 +234,41 @@ unittest
 	assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
 }
 
+/// Support for floating point nan and (partial) infinity
+unittest
+{
+	static struct Foo
+	{
+		float f;
+
+		bool opEquals()(auto ref const(typeof(this)) rhs)
+		{
+			import std.math : isNaN, approxEqual;
+
+			if (f.isNaN && rhs.f.isNaN)
+				return true;
+
+			return approxEqual(f, rhs.f);
+		}
+	}
+
+	// test for Not a Number
+	assert (serializeToJson(Foo()).to!string == `{"f":"nan"}`);
+	assert (serializeToAsdf(Foo()).to!string == `{"f":"nan"}`);
+
+	assert (deserialize!Foo(`{"f":null}`)  == Foo());
+	assert (deserialize!Foo(`{"f":"nan"}`) == Foo());
+
+	assert (serializeToJson(Foo(1f/0f)).to!string == `{"f":"inf"}`);
+	assert (serializeToAsdf(Foo(1f/0f)).to!string == `{"f":"inf"}`);
+	assert (deserialize!Foo(`{"f":"inf"}`)  == Foo( float.infinity));
+	assert (deserialize!Foo(`{"f":"-inf"}`) == Foo(-float.infinity));
+
+	assert (serializeToJson(Foo(-1f/0f)).to!string == `{"f":"-inf"}`);
+	assert (serializeToAsdf(Foo(-1f/0f)).to!string == `{"f":"-inf"}`);
+	assert (deserialize!Foo(`{"f":"-inf"}`) == Foo(-float.infinity));
+}
+
 import std.traits;
 import std.meta;
 import std.range.primitives;
@@ -1164,13 +1199,31 @@ unittest
 void serializeValue(S, V)(ref S serializer, in V value, FormatSpec!char fmt = FormatSpec!char.init)
 	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
-	serializer.putNumberValue(value, fmt);
+	static if (isFloatingPoint!V)
+	{
+		import std.math : isNaN, isFinite, signbit;
+		
+		if (isFinite(value))
+			serializer.putNumberValue(value, fmt);
+		else if (value.isNaN)
+			serializer.putValue(signbit(value) ? "-nan" : "nan");
+		else if (value == V.infinity)
+			serializer.putValue("inf");
+		else if (value == -V.infinity)
+			serializer.putValue("-inf");
+	}
+	else
+		serializer.putNumberValue(value, fmt);
 }
 
 ///
 unittest
 {
 	assert(serializeToJson(BigInt(123)) == `123`);
+	assert(serializeToJson(2.40f) == `2.4`);
+	assert(serializeToJson(float.nan) == `"nan"`);
+	assert(serializeToJson(float.infinity) == `"inf"`);
+	assert(serializeToJson(-float.infinity) == `"-inf"`);
 }
 
 /// Boolean serialization
@@ -1525,6 +1578,37 @@ void deserializeValue(V)(Asdf data, ref V value)
 	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
 	auto kind = data.kind;
+
+	static if (isFloatingPoint!V)
+	{
+		if (kind == Asdf.Kind.null_)
+		{
+			value = V.nan;
+			return;
+		}
+		if (kind == Asdf.Kind.string)
+		{
+			string v;
+			.deserializeValue(data, v);
+			switch (v)
+			{
+				case "nan":
+					value = V.nan;
+					return;
+				case "inf":
+					value = V.infinity;
+					return;
+				case "-inf":
+					value = -V.infinity;
+					return;
+				default:
+					import std.conv : to;
+					value = data.to!V;
+			}
+			return;
+		}
+	}
+
 	if(kind != Asdf.Kind.number)
 		throw new DeserializationException(kind);
 	value = (cast(string) data.data[2 .. $]).to!V;
@@ -1539,6 +1623,15 @@ unittest
 	assert(deserialize!double(serializeToJson(20)) == double(20));
 	assert(deserialize!BigInt(serializeToAsdf(20)) == BigInt(20));
 	assert(deserialize!BigInt(serializeToJson(20)) == BigInt(20));
+
+	assert(deserialize!float (serializeToJson ("2.40")) == float (2.40));
+	assert(deserialize!double(serializeToJson ("2.40")) == double(2.40));
+	assert(deserialize!double(serializeToAsdf("-2.40")) == double(-2.40));
+	
+	import std.math : isNaN, isInfinity;
+	assert(deserialize!float (serializeToJson  ("nan")).isNaN);
+	assert(deserialize!float (serializeToJson  ("inf")).isInfinity);
+	assert(deserialize!float (serializeToJson ("-inf")).isInfinity);
 }
 
 /// Deserialize enum value
