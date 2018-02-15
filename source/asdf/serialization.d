@@ -1818,7 +1818,17 @@ void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
 	}
 }
 
-/// Deserialize enumeration-value associative array
+///
+unittest
+{
+	enum E {a, b}
+	assert(deserialize!(int[E])(serializeToJson(null)) is null);
+	assert(deserialize!(int[E])(serializeToAsdf(null)) is null);
+	assert(deserialize!(int[E])(serializeToJson([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
+	assert(deserialize!(int[E])(serializeToAsdf([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
+}
+
+/// Deserialize associative array with integral type key
 void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
     if((isIntegral!K) && !is(K == enum))
 {
@@ -1843,11 +1853,10 @@ void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
 ///
 unittest
 {
-	enum E {a, b}
-	assert(deserialize!(int[E])(serializeToJson(null)) is null);
-	assert(deserialize!(int[E])(serializeToAsdf(null)) is null);
-	assert(deserialize!(int[E])(serializeToJson([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
-	assert(deserialize!(int[E])(serializeToAsdf([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
+	assert(deserialize!(int[int])(serializeToJson(null)) is null);
+	assert(deserialize!(int[int])(serializeToAsdf(null)) is null);
+	assert(deserialize!(int[int])(serializeToJson([2 : 1, 40 : 2])) == [2 : 1, 40 : 2]);
+	assert(deserialize!(int[int])(serializeToAsdf([2 : 1, 40 : 2])) == [2 : 1, 40 : 2]);
 }
 
 /// Deserialize Nullable value
