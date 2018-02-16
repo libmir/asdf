@@ -362,6 +362,30 @@ unittest
 	assert(serializeToAsdf(S("str", 4)).to!string == `{"foo":"str","bar":4}`);
 }
 
+private template hasStaticTemplatedDeserialize(T, R)
+{
+	import std.traits : hasMember;
+
+	static if (
+		// T shall have the method `deserialize`
+		hasMember!(T, "deserialize") &&
+		// this method shall be templated
+		__traits(isTemplate, T.deserialize))
+	{
+		// this method shall be templated by R type,
+		// takes it as only argument and
+		static assert(is(typeof(T.deserialize(R.init))), 
+			"To be usable with Asdf library signature of `" ~ T.stringof ~ ".deserialize` shall be the following: `deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)`. (* Now it has " ~ __traits(getMember, T, "deserialize").stringof ~ " *). If it exists check if it compiles.");
+		// returns result of T type);
+		static assert(is(typeof(T.deserialize(R.init)) == T), 
+			"To be usable with Asdf library method `" ~ T.stringof ~ ".deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)` shall have return type `" ~ T.stringof ~ "` instead of `" ~ typeof(T.deserialize(R.init)).stringof ~ "`");
+		enum hasStaticTemplatedDeserialize = true;
+	}
+	else
+	{
+		enum hasStaticTemplatedDeserialize = false;
+	}
+}
 
 /// Deserialization function
 V deserialize(V)(Asdf data)
