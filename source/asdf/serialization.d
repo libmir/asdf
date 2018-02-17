@@ -362,6 +362,13 @@ unittest
 	assert(serializeToAsdf(S("str", 4)).to!string == `{"foo":"str","bar":4}`);
 }
 
+/// Check if type T has static templated method allowing to 
+/// deserialize instance of T from range R like
+/// ```
+///     R r;
+///     ...
+///     auto t = T.deserialize(r); // ok
+/// ```
 private template hasStaticTemplatedDeserialize(T, R)
 {
 	import std.traits : hasMember;
@@ -390,9 +397,53 @@ private template hasStaticTemplatedDeserialize(T, R)
 /// Deserialization function
 V deserialize(V)(Asdf data)
 {
-	V value;
-	deserializeValue(data, value);
-	return value;
+	static if (hasStaticTemplatedDeserialize!(V, Asdf))
+	{
+		return V.deserialize(data);
+	}
+	else
+	{
+		V value;
+		deserializeValue(data, value);
+		return value;
+	}
+}
+
+/// Serializing struct Foo with disabled default ctor
+unittest
+{
+	static struct Foo
+	{
+		int i;
+
+		@disable
+		this();
+
+		this(int i)
+		{
+			this.i = i;
+		}
+
+		static auto deserialize(D)(auto ref D deserializer)
+		{
+			import asdf : deserialize;
+
+			foreach(elem; deserializer.byKeyValue)
+			{
+				switch(elem.key)
+				{
+					case "i":
+						int i = elem.value.to!int;
+						return typeof(this)(i);
+					default:
+				}
+			}
+
+			return typeof(this).init;
+		}
+	}
+
+	assert(deserialize!Foo(serializeToAsdf(Foo(6))) == Foo(6));
 }
 
 /// ditto
