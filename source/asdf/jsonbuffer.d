@@ -4,7 +4,7 @@ package struct JsonBuffer
 {
 pure:
 
-	void delegate(const(char)[]) sink;
+	void delegate(const(char)[]) pure sink;
 	// current buffer length
 	size_t length;
 
