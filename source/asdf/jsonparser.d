@@ -93,7 +93,7 @@ unittest
 Parses json value
 Params:
     str = input string
-    initLength = initial output buffer length. Minimal value equals 32.
+    allocator = (optional) memory allocator
 Returns:
     ASDF value
 +/
