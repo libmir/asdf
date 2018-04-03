@@ -1,10 +1,8 @@
 module asdf.jsonbuffer;
 
-package struct JsonBuffer
+package struct JsonBuffer(Dg)
 {
-pure:
-
-	void delegate(const(char)[]) pure sink;
+	Dg sink;
 	// current buffer length
 	size_t length;
 

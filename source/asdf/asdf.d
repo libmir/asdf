@@ -153,9 +153,9 @@ struct Asdf
 	}
 
 	///
-	void toString(scope void delegate(const(char)[]) pure sink) pure
+	void toString(Dg)(scope Dg sink)
 	{
-		scope buffer = JsonBuffer(sink);
+		scope buffer = JsonBuffer!Dg(sink);
 		toStringImpl(buffer);
 		buffer.flush;
 	}
@@ -165,7 +165,7 @@ struct Asdf
 	Params:
 		sink = output range that accepts `char`, `in char[]` and compile time string `(string str)()`
 	+/
-	private void toStringImpl(ref JsonBuffer sink) pure
+	private void toStringImpl(Dg)(ref JsonBuffer!Dg sink)
 	{
 		enforce!EmptyAsdfException(data.length, "data buffer is empty");
 		auto t = data[0];
