@@ -18,8 +18,10 @@ module asdf.asdf;
 import std.exception;
 import std.range.primitives;
 import std.typecons;
+import std.traits;
 
 import asdf.jsonbuffer;
+import asdf.jsonparser: assumePure;
 
 ///
 class AsdfException: Exception
@@ -54,7 +56,7 @@ private void enforceValidAsdf(
 		bool condition,
 		uint kind,
 		string file = __FILE__,
-		size_t line = __LINE__)
+		size_t line = __LINE__) @safe pure
 {
 	if(!condition)
 		throw new InvalidAsdfException(kind, file, line);
@@ -91,7 +93,7 @@ struct Asdf
 	}
 
 	/// Returns ASDF Kind
-	ubyte kind() const
+	ubyte kind() const pure @safe
 	{
 		enforce!EmptyAsdfException(data.length);
 		return data[0];
@@ -103,13 +105,13 @@ struct Asdf
 	ubyte[] data;
 
 	/// Creates ASDF using already allocated data
-	this(ubyte[] data)
+	this(ubyte[] data) pure @safe nothrow @nogc
 	{
 		this.data = data;
 	}
 
 	/// Creates ASDF from a string
-	this(in char[] str)
+	this(in char[] str) pure @safe
 	{
 		data = new ubyte[str.length + 5];
 		data[0] = Kind.string;
@@ -134,7 +136,7 @@ struct Asdf
 	}
 
 	/// Sets deleted bit on
-	void remove()
+	void remove() pure @safe nothrow @nogc
 	{
 		if(data.length)
 			data[0] |= 0x80;
@@ -151,7 +153,7 @@ struct Asdf
 	}
 
 	///
-	void toString(scope void delegate(const(char)[]) sink)
+	void toString(scope void delegate(const(char)[]) pure sink) pure
 	{
 		scope buffer = JsonBuffer(sink);
 		toStringImpl(buffer);
@@ -163,7 +165,7 @@ struct Asdf
 	Params:
 		sink = output range that accepts `char`, `in char[]` and compile time string `(string str)()`
 	+/
-	private void toStringImpl(ref JsonBuffer sink)
+	private void toStringImpl(ref JsonBuffer sink) pure
 	{
 		enforce!EmptyAsdfException(data.length, "data buffer is empty");
 		auto t = data[0];
@@ -266,7 +268,7 @@ struct Asdf
 	/++
 	`==` operator overloads for `null`
 	+/
-	bool opEquals(typeof(null)) const
+	bool opEquals(typeof(null)) const pure @safe nothrow
 	{
 		return data.length == 1 && data[0] == 0;
 	}
@@ -282,7 +284,7 @@ struct Asdf
 	/++
 	`==` operator overloads for `bool`
 	+/
-	bool opEquals(bool boolean) const
+	bool opEquals(bool boolean) const pure @safe nothrow
 	{
 		return data.length == 1 && (data[0] == Kind.true_ && boolean || data[0] == Kind.false_ && !boolean);
 	}
@@ -299,7 +301,7 @@ struct Asdf
 	/++
 	`==` operator overloads for `string`
 	+/
-	bool opEquals(in char[] str) const
+	bool opEquals(in char[] str) const pure @trusted nothrow
 	{
 		return data.length >= 5 && data[0] == Kind.string && data[5 .. 5 + length4] == cast(const(ubyte)[]) str;
 	}
@@ -317,19 +319,19 @@ struct Asdf
 	Returns:
 		input range composed of elements of an array.
 	+/
-	auto byElement()
+	auto byElement() pure
 	{
 		static struct Range
 		{
 			private ubyte[] _data;
 			private Asdf _front;
 
-			auto save() @property
+			auto save() pure @property
 			{
 				return this;
 			}
 
-			void popFront()
+			void popFront() pure
 			{
 				while(!_data.empty)
 				{
@@ -381,13 +383,13 @@ struct Asdf
 				_front = Asdf.init;
 			}
 
-			auto front() @property
+			auto front() pure @property
 			{
 				assert(!empty);
 				return _front;
 			}
 
-			bool empty() @property
+			bool empty() pure @property
 			{
 				return _front.data.length == 0;
 			}
@@ -407,19 +409,19 @@ struct Asdf
 		Input range composed of key-value pairs of an object.
 		Elements are type of `Tuple!(const(char)[], "key", Asdf, "value")`.
 	+/
-	auto byKeyValue()
+	auto byKeyValue() pure
 	{
 		static struct Range
 		{
 			private ubyte[] _data;
 			private Tuple!(const(char)[], "key", Asdf, "value") _front;
 
-			auto save() @property
+			auto save() pure @property
 			{
 				return this;
 			}
 
-			void popFront()
+			void popFront() pure
 			{
 				while(!_data.empty)
 				{
@@ -477,13 +479,13 @@ struct Asdf
 				_front = _front.init;
 			}
 
-			auto front() @property
+			auto front() pure @property
 			{
 				assert(!empty);
 				return _front;
 			}
 
-			bool empty() @property
+			bool empty() pure @property
 			{
 				return _front.value.data.length == 0;
 			}
@@ -499,14 +501,14 @@ struct Asdf
 	}
 
 	/// returns 4-byte length
-	private size_t length4() const @property
+	private size_t length4() const @property pure nothrow @nogc @safe
 	{
 		assert(data.length >= 5);
 		return (cast(uint[1])cast(ubyte[4])data[1 .. 5])[0];
 	}
 
 	/// ditto
-	void length4(size_t len) const @property
+	void length4(size_t len) const @property pure nothrow @nogc @safe
 	{
 		assert(data.length >= 5);
 		assert(len <= uint.max);
@@ -522,7 +524,7 @@ struct Asdf
 	Returns
 		ASDF value if it was found (first win) or ASDF with empty plain data.
 	+/
-	Asdf opIndex(in char[][] keys...)
+	Asdf opIndex(in char[][] keys...) pure
 	{
 		auto asdf = this;
 		if(asdf.data.empty)
@@ -614,24 +616,27 @@ struct Asdf
 					return false.to!T;
 				else goto default;
 			case number:
+			{
 				scope str = cast(const(char)[]) data[2 .. $];
 				static if(is(T == bool))
-					return str.to!real != 0;
+					return assumePure(() => str.to!double)() != 0;
 				else
 				static if(is(T == SysTime) || is(T == DateTime))
 				{
-					auto unixTime = str.to!real;
-					auto secsR = unixTime.trunc;
+					auto unixTime = assumePure(() => str.to!real)();
+					auto secsR = assumePure(() => unixTime.trunc)();
 					auto rem = unixTime - secsR;
 					auto st = SysTime.fromUnixTime(cast(long)(secsR), UTC());
-					st.fracSecs = usecs(cast(long)(rem * 1_000_000));
-					return st.to!T;
+					assumePure((ref SysTime st) => st.fracSecs = usecs(cast(long)(rem * 1_000_000)))(st);
+					return assumePure(() => st.to!T)();
 				}
 				else
-				static if(__traits(compiles, str.to!T))
-					return str.to!T;
+				static if(__traits(compiles, assumePure(() => str.to!T)()))
+					return assumePure(() => str.to!T)();
 				else goto default;
+			}
 			case string:
+			{
 				scope str = cast(const(char)[]) data[5 .. $];
 				static if(is(T == bool))
 					return str != "0" && str != "false" && str != "";
@@ -639,13 +644,17 @@ struct Asdf
 				static if(__traits(compiles, str.to!T))
 					return str.to!T;
 				else goto default;
+			}
+			static if (isAggregateType!T || isArray!T)
+			{
 			case array :
 			case object:
 				static if(__traits(compiles, {T t = deserialize!T(this);}))
 					return deserialize!T(this);
 				else goto default;
+			}
 			default:
-				throw new ConvException(format("Cannot convert kind \\x%02X to %s", k, T.stringof));
+				throw new ConvException(format("Cannot convert kind %s(\\x%02X) to %s", cast(Kind) k, k, T.stringof));
 		}
 	}
 

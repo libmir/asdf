@@ -10,11 +10,12 @@ version(X86)
 
 package struct OutputArray
 {
-	import std.experimental.allocator;
-	import std.experimental.allocator.gc_allocator;
+	import core.memory;
 
 	ubyte[] data;
 	size_t shift;
+
+pure:
 
 	auto result()
 	{
@@ -24,7 +25,8 @@ package struct OutputArray
 	this(size_t initialLength)
 	{
 		assert(initialLength >= 32);
-		data = cast(ubyte[]) GCAllocator.instance.allocate(GCAllocator.instance.goodAllocSize(initialLength));
+		const len = initialLength % 16 ? (initialLength + 16) / 16 * 16 : initialLength;
+		data = cast(ubyte[]) GC.malloc(len)[0 .. len];
 	}
 
 	size_t skip(size_t len)
@@ -86,7 +88,7 @@ package struct OutputArray
 	{
 		size_t length = (data.length) * 2 + len;
 		void[] t = data;
-		GCAllocator.instance.reallocate(t, length);
+		t = GC.realloc(t.ptr, length)[0 .. length];
 		data = cast(ubyte[])t;
 	}
 
@@ -94,7 +96,7 @@ package struct OutputArray
 	{
 		size_t length = (data.length) * 2;
 		void[] t = data;
-		GCAllocator.instance.reallocate(t, length);
+		t = GC.realloc(t.ptr, length)[0 .. length];
 		data = cast(ubyte[])t;
 	}
 }

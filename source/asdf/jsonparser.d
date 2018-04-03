@@ -15,11 +15,13 @@ T4=$(TR $(TDNW $(LREF $1)) $(TD $2) $(TD $3) $(TD $4))
 +/
 module asdf.jsonparser;
 
-import std.range.primitives;
-import std.typecons;
 import asdf.asdf;
 import asdf.outputarray;
+import std.experimental.allocator.gc_allocator;
 import std.meta;
+import std.range.primitives;
+import std.traits;
+import std.typecons;
 
 
 version(LDC)
@@ -119,7 +121,8 @@ Asdf parseJson(
 {
     import std.experimental.allocator;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(GCAllocator.instance, str);
+    shared GCAllocator inst;
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(inst, str);
     if (parser.parse)
         throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
@@ -346,12 +349,25 @@ bool isJsonNumber()(size_t c)
     return (parseFlags[c] & 8) != 0;
 }
 
+package auto assumePure(T)(T t)
+    if (isFunctionPointer!T || isDelegate!T)
+{
+    enum attrs = functionAttributes!T | FunctionAttribute.pure_;
+    return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+}
+
+package auto callPure(alias fn,T...)(T args)
+{
+    auto fp = assumePure(&fn);
+    return (*fp)(args);
+}
+
 /+
 Fast picewise stack
 +/
 private struct Stack
 {
-    import core.stdc.stdlib: malloc, free;
+    import core.stdc.stdlib: cmalloc = malloc, cfree = free;
     @disable this(this);
 
     struct Node
@@ -364,6 +380,8 @@ private struct Stack
     size_t[Node.length] buffer = void;
     size_t length = 0;
     Node node;
+
+pure:
 
     void push()(size_t value)
     {
@@ -382,10 +400,10 @@ private struct Stack
         }
         else
         {
-            auto prevNode = cast(Node*) malloc(Node.sizeof);
+            auto prevNode = cast(Node*) callPure!cmalloc(Node.sizeof);
             *prevNode = node;
             node.prev = prevNode;
-            node.buff = cast(size_t*) malloc(Node.length * size_t.sizeof);
+            node.buff = cast(size_t*) callPure!cmalloc(Node.length * size_t.sizeof);
             node.buff[0] = value;
         }
     }
@@ -410,7 +428,7 @@ private struct Stack
         {
             if (node.buff != buffer.ptr)
             {
-                free(node.buff);
+                callPure!cfree(node.buff);
                 node = *node.prev;
             }
         }
@@ -426,7 +444,7 @@ private struct Stack
             return;
         while(node.buff !is buffer.ptr)
         {
-            free(node.buff);
+            callPure!cfree(node.buff);
             node = *node.prev;
         }
     }
@@ -467,7 +485,8 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
     enum bool chunked = !is(Input : const(char)[]);
 
-    this(ref Allocator allocator, Input input)
+    this(ref Allocator allocator, Input input) 
+
     {
         this.input = input;
         this.allocator = &allocator;
@@ -589,7 +608,16 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 {
                     const valueLength = stringAndNumberShift - dataPtr;
                     import std.algorithm.comparison: max;
-                    allocator.reallocate(*cast(void[]*)&data, max(data.length * 2, dataRequiredLength));
+                    const len = max(data.length * 2, dataRequiredLength);
+                    static if (is(Unqual!Allocator == GCAllocator))
+                    {
+                        import core.memory: GC;
+                        data = cast(ubyte[]) GC.realloc(data.ptr, len)[0 .. len];
+                    }
+                    else
+                    {
+                        allocator.reallocate(*cast(void[]*)&data, len);
+                    }
                     dataPtr = data.ptr + dataLength;
                     stringAndNumberShift = dataPtr + valueLength;
                 }
@@ -608,11 +636,29 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         auto rl = (strEnd - strPtr) * 6;
         if (data.ptr !is null && data.length < rl)
         {
-            allocator.deallocate(data);
+            static if (is(Unqual!Allocator == GCAllocator))
+            {
+                import core.memory: GC;
+                GC.free(data.ptr);
+            }
+            else
+            {
+                allocator.deallocate(data);
+            }
             data = null;
         }
         if (data.ptr is null)
-            data = cast(ubyte[])allocator.allocate(rl);
+        {
+            static if (is(Unqual!Allocator == GCAllocator))
+            {
+                import core.memory: GC;
+                data = cast(ubyte[]) GC.malloc(rl)[0 .. rl];
+            }
+            else
+            {
+                data = cast(ubyte[])allocator.allocate(rl);
+            }
+        }
         dataPtr = data.ptr;
 
         bool skipSpaces()()

@@ -3,8 +3,10 @@ $(H3 ASDF and JSON Serialization)
 +/
 module asdf.serialization;
 
+import asdf.jsonparser: assumePure;
+
 ///
-unittest
+pure unittest
 {
 	import std.bigint;
 	import std.datetime;
@@ -20,7 +22,7 @@ unittest
 	static class C
 	{
 		private double _foo;
-
+	pure:
 		this()
 		{
 			_foo = 4;
@@ -42,14 +44,14 @@ unittest
 		DateTime datetime;
 		alias datetime this;
 
-		static DateTimeProxy deserialize(Asdf data)
+		static DateTimeProxy deserialize(Asdf data) pure
 		{
 			string val;
 			deserializeScopedString(data, val);
 			return DateTimeProxy(DateTime.fromISOString(val));
 		}
 
-		void serialize(S)(ref S serializer)
+		void serialize(S)(ref S serializer) pure
 		{
 			serializer.putValue(datetime.toISOString);
 		}
@@ -97,7 +99,7 @@ unittest
 }
 
 /// `finalizeDeserialization` method
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -107,7 +109,7 @@ unittest
 		@serializationIgnoreIn
 		double sum;
 
-		void finalizeDeserialization(Asdf data)
+		void finalizeDeserialization(Asdf data) pure
 		{
 			auto r = data["c", "d"];
 			auto a = r["e"].get(0.0);
@@ -124,7 +126,7 @@ unittest
 	static struct S
 	{
 		@serializationIgnore string str;
-
+	pure:
 		string a() @property
 		{
 			return str;
@@ -370,11 +372,11 @@ V deserialize(V)(Asdf data)
 }
 
 /// ditto
-V deserialize(V)(string str)
+V deserialize(V)(in char[] str)
 {
 	import asdf.jsonparser: parseJson;
 	import std.range: only;
-	return (cast(const(ubyte)[]) str).only.parseJson(str.length + 32).deserialize!V;
+	return str.parseJson.deserialize!V;
 }
 
 ///
@@ -423,7 +425,7 @@ struct SerializationGroup
 
 
 /// Returns Serialization with the `args` list.
-private Serialization serialization(string[] args...)
+private Serialization serialization(string[] args...) pure @safe
 {
 	return Serialization(args.dup);
 }
@@ -432,14 +434,14 @@ private Serialization serialization(string[] args...)
 Attribute for key overloading during Serialization and Deserialization.
 The first argument overloads the key value during serialization unless `serializationKeyOut` is given.
 +/
-Serialization serializationKeys(string[] keys...)
+Serialization serializationKeys(string[] keys...) pure @safe
 {
 	assert(keys.length, "use @serializationIgnore or at least one key");
 	return serialization("keys" ~ keys);
 }
 
 ///
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -452,14 +454,14 @@ unittest
 /++
 Attribute for key overloading during deserialization.
 +/
-Serialization serializationKeysIn(string[] keys...)
+Serialization serializationKeysIn(string[] keys...) pure @safe
 {
 	assert(keys.length, "use @serializationIgnoreIn or at least one key");
 	return serialization("keys-in" ~ keys);
 }
 
 ///
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -474,7 +476,7 @@ Attribute for key overloading during deserialization.
 
 Attention: `serializationMultiKeysIn` is mot optimized yet and may significantly slowdown deserialization.
 +/
-SerializationGroup serializationMultiKeysIn(string[][] keys...)
+SerializationGroup serializationMultiKeysIn(string[][] keys...) pure @safe
 {
 	return SerializationGroup(keys.dup);
 }
@@ -493,7 +495,7 @@ unittest
 /++
 Attribute for key overloading during serialization.
 +/
-Serialization serializationKeyOut(string key)
+Serialization serializationKeyOut(string key) pure @safe
 {
 	return serialization("key-out", key);
 }
@@ -694,7 +696,7 @@ unittest
 		private int sum;
 
 		// opApply is used for serialization
-		int opApply(int delegate(in char[] key, int val) dg)
+		int opApply(int delegate(in char[] key, int val) pure dg) pure
 		{
 			if(auto r = dg("a", 1)) return r;
 			if(auto r = dg("b", 2)) return r;
@@ -703,7 +705,7 @@ unittest
 		}
 
 		// opIndexAssign for deserialization
-		void opIndexAssign(int val, string key)
+		void opIndexAssign(int val, string key) pure
 		{
 			sum += val;
 		}
@@ -789,7 +791,7 @@ struct JsonSerializer(string sep)
 	JsonBuffer sink;
 
 	///
-	this(void delegate(const(char)[]) sink)
+	this(void delegate(const(char)[]) pure sink)
 	{
 		this.sink.sink = sink;
 	}
@@ -922,7 +924,8 @@ struct JsonSerializer(string sep)
 	///ditto
 	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
 	{
-		formatValue(&sink.putSmallEscaped, num, fmt);
+		auto f = &sink.putSmallEscaped;
+		assumePure((typeof(f) fun) => formatValue(fun, num, fmt))(f);
 	}
 
 	///ditto
@@ -976,7 +979,7 @@ struct JsonSerializer(string sep)
 Creates JSON serialization back-end.
 Use `sep` equal to `"\t"` or `"    "` for pretty formatting.
 +/
-auto jsonSerializer(string sep = "")(scope void delegate(const(char)[]) sink)
+auto jsonSerializer(string sep = "")(scope void delegate(const(char)[]) pure sink)
 {
 	return JsonSerializer!sep(sink);
 }
@@ -1062,6 +1065,8 @@ struct AsdfSerializer
 	import asdf.asdf;
 	private uint state;
 
+pure:
+
 	/// Serialization primitives
 	size_t objectBegin()
 	{
@@ -1100,11 +1105,11 @@ struct AsdfSerializer
 	}
 
 	///ditto
-	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
+	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init) pure
 	{
 		app.put1(Asdf.Kind.number);
 		auto sh = app.skip(1);
-		(&app).formatValue(num, fmt);
+		assumePure((ref OutputArray app) => formatValue(app, num, fmt))(app);
 		app.put1(cast(ubyte)(app.shift - sh - 1), sh);
 	}
 
@@ -1406,7 +1411,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 			return;
 		}
 	}
-	static if(__traits(compiles, value.serialize(serializer)))
+	static if(__traits(hasMember, V, "serialize"))
 	{
 		value.serialize(serializer);
 	}
@@ -1507,7 +1512,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 				}
 			}
 		}
-		static if(__traits(compiles, value.finalizeSerialization(serializer)))
+		static if(__traits(hasMember, V, "finalizeSerialization"))
 		{
 			value.finalizeSerialization(serializer);
 		}
@@ -1548,7 +1553,7 @@ unittest
 }
 
 /// Deserialize boolean value
-void deserializeValue(Asdf data, ref bool value)
+void deserializeValue(Asdf data, ref bool value) pure @safe
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
@@ -1565,7 +1570,7 @@ void deserializeValue(Asdf data, ref bool value)
 }
 
 ///
-unittest
+pure unittest
 {
 	assert(deserialize!bool(serializeToAsdf(true)));
 	assert(deserialize!bool(serializeToJson(true)));
@@ -1650,7 +1655,7 @@ unittest
 }
 
 /++
-Deserialize scoped string value
+Deserializes scoped string value.
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
 void deserializeScopedString(V)(Asdf data, ref V value)
@@ -1670,7 +1675,10 @@ void deserializeScopedString(V)(Asdf data, ref V value)
 	}
 }
 
-/// Deserialize string value
+/++
+Deserializes string value.
+This function allocates new string.
++/
 void deserializeValue(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
@@ -1678,7 +1686,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	with(Asdf.Kind) switch(kind)
 	{
 		case string:
-			value = cast(V) cast(V) (cast(const(char)[]) data.data[5 .. $]);
+			value = (() @trusted => cast(V) (data.data[5 .. $]).dup)();
 			return;
 		case null_:
 			value = null;
@@ -1879,7 +1887,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
 	static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
-	static if(__traits(compiles, value = V.deserialize(data)))
+	static if (__traits(hasMember, V, "deserialize"))
 	{
 		value = V.deserialize(data);
 	}
@@ -2122,7 +2130,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
-		static if(__traits(compiles, value.finalizeDeserialization(data)))
+		static if(__traits(hasMember, V, "finalizeDeserialization"))
 		{
 			value.finalizeDeserialization(data);
 		}
