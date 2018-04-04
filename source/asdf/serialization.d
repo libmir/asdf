@@ -472,7 +472,7 @@ pure unittest
 }
 
 /++
-Attribute that force deserialiser to throw exception that a field was not found in the input.
+Attribute that force deserialiser to throw an exception that the field was not found in the input.
 +/
 enum serializationRequired = serialization("required");
 
@@ -480,7 +480,7 @@ enum serializationRequired = serialization("required");
 pure unittest
 {
 	import std.exception;
-	static struct S
+	struct S
 	{
 		@serializationRequired
 		string field;
