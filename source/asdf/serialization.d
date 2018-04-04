@@ -392,21 +392,128 @@ unittest
 }
 
 
-/// Serialization proxy for aggregation types
+/++
+Serialization proxy for aggregation types.
+
+Example: Proxy for types.
+----
+	@serializedAs!ProxyE
+	enum E
+	{
+		foo,
+		bar,
+	}
+
+	// const(char)[] doesn't reallocate ASDF data.
+	@serializedAs!(const(char)[])
+	struct ProxyE
+	{
+		E e;
+
+		this(E e)
+		{
+			this.e = e;
+		}
+
+		this(in char[] str)
+		{
+			if (str == "FOO")
+				e =  E.foo;
+			else
+			if (str == "BAR")
+				e = E.bar;
+			else
+				throw new Exception("Unknown: " ~ cast(string)str);
+		}
+
+		string toString()
+		{
+			if (e == E.foo)
+				return "FOO";
+			else
+				return "BAR";
+		}
+
+		E opCast(T : E)()
+		{
+			return e;
+		}
+	}
+
+	unittest
+	{
+		assert(serializeToJson(E.foo) == `"FOO"`);
+		assert(`"FOO"`.deserialize!E == E.foo);
+	}
+----
++/
 struct serializedAs(T){}
 
-///
+/// Proxy for members
 unittest
 {
 	struct S
 	{
-		@serializedAs!string
+		// const(char)[] doesn't reallocate ASDF data.
+		@serializedAs!(const(char)[])
 		uint bar;
 	}
 
 	auto json = `{"bar":"4"}`;
 	assert(serializeToJson(S(4)) == json);
 	assert(deserialize!S(json) == S(4));
+}
+
+version(unittest) private
+{
+	@serializedAs!ProxyE
+	enum E
+	{
+		foo,
+		bar,
+	}
+
+	// const(char)[] doesn't reallocate ASDF data.
+	@serializedAs!(const(char)[])
+	struct ProxyE
+	{
+		E e;
+
+		this(E e)
+		{
+			this.e = e;
+		}
+
+		this(in char[] str)
+		{
+			if (str == "FOO")
+				e =  E.foo;
+			else
+			if (str == "BAR")
+				e = E.bar;
+			else
+				throw new Exception("Unknown: " ~ cast(string)str);
+		}
+
+		string toString()
+		{
+			if (e == E.foo)
+				return "FOO";
+			else
+				return "BAR";
+		}
+
+		E opCast(T : E)()
+		{
+			return e;
+		}
+	}
+
+	unittest
+	{
+		assert(serializeToJson(E.foo) == `"FOO"`);
+		assert(`"FOO"`.deserialize!E == E.foo);
+	}
 }
 
 /// Main serialization attribute type
@@ -1263,7 +1370,13 @@ unittest
 void serializeValue(S, V)(ref S serializer, in V value)
 	if(is(V == enum))
 {
-	serializer.putValue(value.to!string);
+	static if (hasSerializedAs!V)
+	{
+		alias Proxy = getSerializedAs!V;
+		serializer.serializeValue(value.to!Proxy);
+	}
+	else
+		serializer.putValue(value.to!string);
 }
 ///
 unittest
@@ -1448,6 +1561,13 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 			return;
 		}
 	}
+	static if (hasSerializedAs!V)
+	{{
+		alias Proxy = getSerializedAs!V;
+		serializer.serializeValue(value.to!Proxy);
+		return;
+	}}
+	else
 	static if(__traits(hasMember, V, "serialize"))
 	{
 		value.serialize(serializer);
@@ -1671,9 +1791,23 @@ unittest
 void deserializeValue(V)(Asdf data, ref V value)
 	if(is(V == enum))
 {
-	string s;
-	data.deserializeValue(s);
-	value = s.to!V;
+	static if (hasSerializedAs!V)
+	{
+		alias Proxy = getSerializedAs!V;
+		enum udas = [getUDAs!(V, Serialization)];
+		Proxy proxy;
+		enum F = isFlexible(V.stringof, "this", udas);
+		enum S = isScoped(V.stringof, "this", udas) && __traits(compiles, .deserializeScopedString(data, proxy));
+		alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+		Fun(data, proxy);
+		value = proxy.to!V;
+	}
+	else
+	{
+		string s;
+		data.deserializeValue(s);
+		value = s.to!V;
+	}
 }
 
 ///
@@ -1688,8 +1822,7 @@ unittest
 Deserializes scoped string value.
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
-void deserializeScopedString(V)(Asdf data, ref V value)
-	if(is(V : const(char)[]))
+void deserializeScopedString(V : const(char)[])(Asdf data, ref V value)
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
@@ -1912,11 +2045,25 @@ void deserializeValue(V)(Asdf data, ref V value)
 	value = payload;
 }
 
+private static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
+
 /// Deserialize aggregate value
 void deserializeValue(V)(Asdf data, ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
-	static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
+	static if (hasSerializedAs!V)
+	{{
+		alias Proxy = getSerializedAs!V;
+		enum udas = [getUDAs!(V, Serialization)];
+		Proxy proxy;
+		enum F = isFlexible(V.stringof, "this", udas);
+		enum S = isScoped(V.stringof, "this", udas) && __traits(compiles, .deserializeScopedString(data, proxy));
+		alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+		Fun(data, proxy);
+		value = proxy.to!V;
+		return;
+	}}
+	else
 	static if (__traits(hasMember, V, "deserialize"))
 	{
 		value = V.deserialize(data);
@@ -2000,11 +2147,12 @@ void deserializeValue(V)(Asdf data, ref V value)
 							{
 								static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								Proxy proxy;
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 								foreach(v; elem.value.byElement)
 								{
-									Proxy proxy;
+									proxy = proxy.init;
 									Fun(v, proxy);
 									__traits(getMember, value, member).put(proxy);
 								}
@@ -2014,11 +2162,12 @@ void deserializeValue(V)(Asdf data, ref V value)
 							{
 								static assert(hasSerializedAs!(__traits(getMember, value, member)), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								Proxy proxy;
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 								foreach(v; elem.value.byKeyValue)
 								{
-									Proxy proxy;
+									proxy = proxy.init;
 									Fun(v.value, proxy);
 									__traits(getMember, value, member)[elem.key.idup] = proxy;
 								}
@@ -2027,10 +2176,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 							static if(hasSerializedAs!(__traits(getMember, value, member)))
 							{
 								alias Proxy = getSerializedAs!(__traits(getMember, value, member));
+								Proxy proxy;
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
-						
-								Proxy proxy;
+
 								Fun(elem.value, proxy);
 								__traits(getMember, value, member) = proxy.to!Type;
 							}
