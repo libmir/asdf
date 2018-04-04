@@ -116,6 +116,7 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 | `@serializationTransformIn!fin` | call function `fin` to transform the data |
 | `@serializationTransformOut!fout`  | run function `fout` on serialization, different notation |
 | `@serializationFlexible`  | be flexible on the datatype on reading, e.g. read long's that are wrapped as strings |
+| `@serializationRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
 
 
 please also look into the Docs or Unittest for concrete examples!
