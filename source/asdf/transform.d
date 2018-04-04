@@ -31,6 +31,8 @@ struct AsdfNode
 	+/
 	Asdf data;
 
+pure:
+
 	/++
 	Returns `true` if the node is leaf.
 	+/

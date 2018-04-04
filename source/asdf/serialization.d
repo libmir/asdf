@@ -3,8 +3,10 @@ $(H3 ASDF and JSON Serialization)
 +/
 module asdf.serialization;
 
+import asdf.jsonparser: assumePure;
+
 ///
-unittest
+pure unittest
 {
 	import std.bigint;
 	import std.datetime;
@@ -20,7 +22,7 @@ unittest
 	static class C
 	{
 		private double _foo;
-
+	pure:
 		this()
 		{
 			_foo = 4;
@@ -42,14 +44,14 @@ unittest
 		DateTime datetime;
 		alias datetime this;
 
-		static DateTimeProxy deserialize(Asdf data)
+		static DateTimeProxy deserialize(Asdf data) pure
 		{
 			string val;
 			deserializeScopedString(data, val);
 			return DateTimeProxy(DateTime.fromISOString(val));
 		}
 
-		void serialize(S)(ref S serializer)
+		void serialize(S)(ref S serializer) pure
 		{
 			serializer.putValue(datetime.toISOString);
 		}
@@ -97,7 +99,7 @@ unittest
 }
 
 /// `finalizeDeserialization` method
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -107,7 +109,7 @@ unittest
 		@serializationIgnoreIn
 		double sum;
 
-		void finalizeDeserialization(Asdf data)
+		void finalizeDeserialization(Asdf data) pure
 		{
 			auto r = data["c", "d"];
 			auto a = r["e"].get(0.0);
@@ -124,7 +126,7 @@ unittest
 	static struct S
 	{
 		@serializationIgnore string str;
-
+	pure:
 		string a() @property
 		{
 			return str;
@@ -370,11 +372,11 @@ V deserialize(V)(Asdf data)
 }
 
 /// ditto
-V deserialize(V)(string str)
+V deserialize(V)(in char[] str)
 {
 	import asdf.jsonparser: parseJson;
 	import std.range: only;
-	return (cast(const(ubyte)[]) str).only.parseJson(str.length + 32).deserialize!V;
+	return str.parseJson.deserialize!V;
 }
 
 ///
@@ -423,7 +425,7 @@ struct SerializationGroup
 
 
 /// Returns Serialization with the `args` list.
-private Serialization serialization(string[] args...)
+private Serialization serialization(string[] args...) pure @safe
 {
 	return Serialization(args.dup);
 }
@@ -432,14 +434,14 @@ private Serialization serialization(string[] args...)
 Attribute for key overloading during Serialization and Deserialization.
 The first argument overloads the key value during serialization unless `serializationKeyOut` is given.
 +/
-Serialization serializationKeys(string[] keys...)
+Serialization serializationKeys(string[] keys...) pure @safe
 {
 	assert(keys.length, "use @serializationIgnore or at least one key");
 	return serialization("keys" ~ keys);
 }
 
 ///
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -452,14 +454,14 @@ unittest
 /++
 Attribute for key overloading during deserialization.
 +/
-Serialization serializationKeysIn(string[] keys...)
+Serialization serializationKeysIn(string[] keys...) pure @safe
 {
 	assert(keys.length, "use @serializationIgnoreIn or at least one key");
 	return serialization("keys-in" ~ keys);
 }
 
 ///
-unittest
+pure unittest
 {
 	static struct S
 	{
@@ -470,11 +472,29 @@ unittest
 }
 
 /++
+Attribute that force deserialiser to throw an exception that the field was not found in the input.
++/
+enum serializationRequired = serialization("required");
+
+///
+pure unittest
+{
+	import std.exception;
+	struct S
+	{
+		@serializationRequired
+		string field;
+	}
+	assert(`{"field":"val"}`.deserialize!S.field == "val");
+	assertThrown(`{"other":"val"}`.deserialize!S);
+}
+
+/++
 Attribute for key overloading during deserialization.
 
-Attention: `serializationMultiKeysIn` is mot optimized yet and may significantly slowdown deserialization.
+Attention: `serializationMultiKeysIn` is not optimized yet and may significantly slowdown deserialization.
 +/
-SerializationGroup serializationMultiKeysIn(string[][] keys...)
+SerializationGroup serializationMultiKeysIn(string[][] keys...) pure @safe
 {
 	return SerializationGroup(keys.dup);
 }
@@ -493,7 +513,7 @@ unittest
 /++
 Attribute for key overloading during serialization.
 +/
-Serialization serializationKeyOut(string key)
+Serialization serializationKeyOut(string key) pure @safe
 {
 	return serialization("key-out", key);
 }
@@ -694,7 +714,7 @@ unittest
 		private int sum;
 
 		// opApply is used for serialization
-		int opApply(int delegate(in char[] key, int val) dg)
+		int opApply(int delegate(in char[] key, int val) pure dg) pure
 		{
 			if(auto r = dg("a", 1)) return r;
 			if(auto r = dg("b", 2)) return r;
@@ -703,7 +723,7 @@ unittest
 		}
 
 		// opIndexAssign for deserialization
-		void opIndexAssign(int val, string key)
+		void opIndexAssign(int val, string key) pure
 		{
 			sum += val;
 		}
@@ -760,7 +780,7 @@ unittest
 }
 
 /// JSON serialization back-end
-struct JsonSerializer(string sep)
+struct JsonSerializer(string sep, Dg)
 {
 	import asdf.jsonbuffer;
 
@@ -786,12 +806,12 @@ struct JsonSerializer(string sep)
 
 
 	/// JSON string buffer
-	JsonBuffer sink;
+	JsonBuffer!Dg sink;
 
 	///
-	this(void delegate(const(char)[]) sink)
+	this(Dg sink)
 	{
-		this.sink.sink = sink;
+		this.sink = JsonBuffer!Dg(sink);
 	}
 
 	private uint state;
@@ -922,7 +942,8 @@ struct JsonSerializer(string sep)
 	///ditto
 	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
 	{
-		formatValue(&sink.putSmallEscaped, num, fmt);
+		auto f = &sink.putSmallEscaped;
+		assumePure((typeof(f) fun) => formatValue(fun, num, fmt))(f);
 	}
 
 	///ditto
@@ -976,9 +997,9 @@ struct JsonSerializer(string sep)
 Creates JSON serialization back-end.
 Use `sep` equal to `"\t"` or `"    "` for pretty formatting.
 +/
-auto jsonSerializer(string sep = "")(scope void delegate(const(char)[]) sink)
+auto jsonSerializer(string sep = "", Dg)(scope Dg sink)
 {
-	return JsonSerializer!sep(sink);
+	return JsonSerializer!(sep, Dg)(sink);
 }
 
 ///
@@ -1062,6 +1083,8 @@ struct AsdfSerializer
 	import asdf.asdf;
 	private uint state;
 
+pure:
+
 	/// Serialization primitives
 	size_t objectBegin()
 	{
@@ -1100,11 +1123,11 @@ struct AsdfSerializer
 	}
 
 	///ditto
-	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
+	void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init) pure
 	{
 		app.put1(Asdf.Kind.number);
 		auto sh = app.skip(1);
-		(&app).formatValue(num, fmt);
+		assumePure((ref OutputArray app) => formatValue(app, num, fmt))(app);
 		app.put1(cast(ubyte)(app.shift - sh - 1), sh);
 	}
 
@@ -1398,6 +1421,25 @@ void serializeValue(S, N)(ref S serializer, auto ref N value)
 void serializeValue(S, V)(ref S serializer, auto ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
+
+	enum isPublic(string member) = !__traits(getProtection, __traits(getMember, value, member)).privateOrPackage;
+	enum proper(string member) = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
+	template proccess(string member)
+	{
+		static if (!isPublic!member)
+			enum proccess = false;
+		else
+		static if (proper!member)
+			enum proccess = true;
+		else
+		static if (__traits(compiles, { auto _val = __traits(getMember, value, member); }))
+			static if (functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property)
+				enum proccess = true;
+			else
+				enum proccess = false;
+		else
+			enum proccess = false;
+	}
 	static if(is(V == class) || is(V == interface))
 	{
 		if(value is null)
@@ -1406,7 +1448,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 			return;
 		}
 	}
-	static if(__traits(compiles, value.serialize(serializer)))
+	static if(__traits(hasMember, V, "serialize"))
 	{
 		value.serialize(serializer);
 	}
@@ -1415,14 +1457,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		auto state = serializer.objectBegin();
 		foreach(member; __traits(allMembers, V))
 		{
-			static if(
-				(__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member))
-				||
-					__traits(compiles, { auto _val = __traits(getMember, value, member); })
-					&&
-					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property)
-				&&
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+			static if(proccess!member)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
@@ -1507,7 +1542,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 				}
 			}
 		}
-		static if(__traits(compiles, value.finalizeSerialization(serializer)))
+		static if(__traits(hasMember, V, "finalizeSerialization"))
 		{
 			value.finalizeSerialization(serializer);
 		}
@@ -1548,7 +1583,7 @@ unittest
 }
 
 /// Deserialize boolean value
-void deserializeValue(Asdf data, ref bool value)
+void deserializeValue(Asdf data, ref bool value) pure @safe
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
@@ -1565,7 +1600,7 @@ void deserializeValue(Asdf data, ref bool value)
 }
 
 ///
-unittest
+pure unittest
 {
 	assert(deserialize!bool(serializeToAsdf(true)));
 	assert(deserialize!bool(serializeToJson(true)));
@@ -1650,7 +1685,7 @@ unittest
 }
 
 /++
-Deserialize scoped string value
+Deserializes scoped string value.
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
 void deserializeScopedString(V)(Asdf data, ref V value)
@@ -1670,7 +1705,10 @@ void deserializeScopedString(V)(Asdf data, ref V value)
 	}
 }
 
-/// Deserialize string value
+/++
+Deserializes string value.
+This function allocates new string.
++/
 void deserializeValue(V)(Asdf data, ref V value)
 	if(is(V : const(char)[]))
 {
@@ -1678,7 +1716,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	with(Asdf.Kind) switch(kind)
 	{
 		case string:
-			value = cast(V) cast(V) (cast(const(char)[]) data.data[5 .. $]);
+			value = (() @trusted => cast(V) (data.data[5 .. $]).dup)();
 			return;
 		case null_:
 			value = null;
@@ -1879,7 +1917,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
 	static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
-	static if(__traits(compiles, value = V.deserialize(data)))
+	static if (__traits(hasMember, V, "deserialize"))
 	{
 		value = V.deserialize(data);
 	}
@@ -1904,27 +1942,39 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
+		enum isPublic(string member) = !__traits(getProtection, __traits(getMember, value, member)).privateOrPackage;
+		enum proper(string member) = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
+		template proccess(string member)
+		{
+			static if (!isPublic!member)
+				enum proccess = false;
+			else
+			static if (proper!member)
+				enum proccess = true;
+			else
+			static if (__traits(compiles, {auto _ptr = &__traits(getMember, value, member);}) && isCallable!(__traits(getMember, value, member)))
+				static if ((functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property) && Parameters!(__traits(getMember, value, member)).length == 1)
+					enum proccess = true;
+				else
+					enum proccess = false;
+			else
+				enum proccess = false;
+		}
+		struct RequiredFlags
+		{
+			static foreach(member; __traits(allMembers, V))
+				static if (proccess!member)
+					static if (hasRequired([getUDAs!(__traits(getMember, value, member), Serialization)]))
+						mixin ("bool " ~ member ~ ";");
+		}
+		RequiredFlags requiredFlags;
 		foreach(elem; data.byKeyValue)
 		{
 			switch(elem.key)
 			{
 				foreach(member; __traits(allMembers, V))
 				{
-					enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
-					static if(
-						(
-							proper
-							||
-							__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
-							&&
-							isCallable!(__traits(getMember, value, member))
-							&&
-							functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
-							&&
-							Parameters!(__traits(getMember, value, member)).length == 1
-						)
-						&&
-						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+					static if (proccess!member)
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 						enum F = isFlexible(V.stringof, member, udas);
@@ -1936,7 +1986,9 @@ void deserializeValue(V)(Asdf data, ref V value)
 				case key:
 
 							}
-							static if(!proper)
+							static if (hasRequired(udas))
+								__traits(getMember, requiredFlags, member) = true;
+							static if(!proper!member)
 							{
 								alias Type = Parameters!(__traits(getMember, value, member));
 							}
@@ -1983,7 +2035,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 								__traits(getMember, value, member) = proxy.to!Type;
 							}
 							else
-							static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+							static if(proper!member && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2017,21 +2069,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 		foreach(member; __traits(allMembers, V))
 		{
-			enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
-			static if(
-				(
-					proper
-					||
-					__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
-					&&
-					isCallable!(__traits(getMember, value, member))
-					&&
-					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
-					&&
-					Parameters!(__traits(getMember, value, member)).length == 1
-				)
-				&&
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+			static if (proccess!member)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				enum F = isFlexible(V.stringof, member, udas);
@@ -2046,7 +2084,9 @@ void deserializeValue(V)(Asdf data, ref V value)
 							auto d = data[ser];
 							if(d.data.length)
 							{
-								static if(!proper)
+								static if (hasRequired(udas))
+									__traits(getMember, requiredFlags, member) = true;
+								static if(!proper!member)
 								{
 									alias Type = Parameters!(__traits(getMember, value, member));
 								}
@@ -2093,7 +2133,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 									__traits(getMember, value, member) = proxy.to!Type;
 								}
 								else
-								static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+								static if(proper!member && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 								{
 									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
 									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2122,7 +2162,14 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
-		static if(__traits(compiles, value.finalizeDeserialization(data)))
+		foreach(member; __traits(allMembers, RequiredFlags))
+		{{
+			static immutable e = new AsdfException(
+				"ASDF deserialisation: Required member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
+			if (!__traits(getMember, requiredFlags, member))
+				throw e;
+		}}
+		static if(__traits(hasMember, V, "finalizeDeserialization"))
 		{
 			value.finalizeDeserialization(data);
 		}
@@ -2303,7 +2350,7 @@ private string[] keysIn(string type, string member, Serialization[] attrs)
 		` : Only single declaration of "keys" / "keys-in" serialization attribute is allowed`);
 }
 
-private bool ignoreOut(Serialization[] attrs)
+private bool ignoreOut()(Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind;
 	return attrs.canFind!(a => 
@@ -2313,7 +2360,7 @@ private bool ignoreOut(Serialization[] attrs)
 			);
 }
 
-private bool ignoreIn(Serialization[] attrs)
+private bool ignoreIn()(Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind;
 	return attrs.canFind!(a => 
@@ -2323,8 +2370,13 @@ private bool ignoreIn(Serialization[] attrs)
 			);
 }
 
+private bool hasRequired()(Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind;
+	return attrs.canFind!(a => a.args == ["required"]);
+}
 
-private bool privateOrPackage(string protection)
+private bool privateOrPackage()(string protection)
 {
 	return protection == "private" || protection == "package";
 }
