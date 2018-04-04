@@ -161,7 +161,7 @@ auto parseJsonByLine(
 {
     import std.experimental.allocator.gc_allocator;
     alias Parser = JsonParser!(false, cast(bool)spaces, false, shared GCAllocator, Input);
-    static struct ByLineValue
+    struct ByLineValue
     {
         Parser parser;
         private bool _empty, _nextEmpty;

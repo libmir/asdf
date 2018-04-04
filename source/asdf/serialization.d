@@ -472,9 +472,27 @@ pure unittest
 }
 
 /++
+Attribute that force deserialiser to throw exception that a field was not found in the input.
++/
+enum serializationRequired = serialization("required");
+
+///
+pure unittest
+{
+	import std.exception;
+	static struct S
+	{
+		@serializationRequired
+		string field;
+	}
+	assert(`{"field":"val"}`.deserialize!S.field == "val");
+	assertThrown(`{"other":"val"}`.deserialize!S);
+}
+
+/++
 Attribute for key overloading during deserialization.
 
-Attention: `serializationMultiKeysIn` is mot optimized yet and may significantly slowdown deserialization.
+Attention: `serializationMultiKeysIn` is not optimized yet and may significantly slowdown deserialization.
 +/
 SerializationGroup serializationMultiKeysIn(string[][] keys...) pure @safe
 {
@@ -1403,6 +1421,25 @@ void serializeValue(S, N)(ref S serializer, auto ref N value)
 void serializeValue(S, V)(ref S serializer, auto ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
+
+	enum isPublic(string member) = !__traits(getProtection, __traits(getMember, value, member)).privateOrPackage;
+	enum proper(string member) = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
+	template proccess(string member)
+	{
+		static if (!isPublic!member)
+			enum proccess = false;
+		else
+		static if (proper!member)
+			enum proccess = true;
+		else
+		static if (__traits(compiles, { auto _val = __traits(getMember, value, member); }))
+			static if (functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property)
+				enum proccess = true;
+			else
+				enum proccess = false;
+		else
+			enum proccess = false;
+	}
 	static if(is(V == class) || is(V == interface))
 	{
 		if(value is null)
@@ -1420,14 +1457,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		auto state = serializer.objectBegin();
 		foreach(member; __traits(allMembers, V))
 		{
-			static if(
-				(__traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member))
-				||
-					__traits(compiles, { auto _val = __traits(getMember, value, member); })
-					&&
-					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property)
-				&&
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+			static if(proccess!member)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				static if(!ignoreOut(udas))
@@ -1912,27 +1942,39 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
+		enum isPublic(string member) = !__traits(getProtection, __traits(getMember, value, member)).privateOrPackage;
+		enum proper(string member) = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
+		template proccess(string member)
+		{
+			static if (!isPublic!member)
+				enum proccess = false;
+			else
+			static if (proper!member)
+				enum proccess = true;
+			else
+			static if (__traits(compiles, {auto _ptr = &__traits(getMember, value, member);}) && isCallable!(__traits(getMember, value, member)))
+				static if ((functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property) && Parameters!(__traits(getMember, value, member)).length == 1)
+					enum proccess = true;
+				else
+					enum proccess = false;
+			else
+				enum proccess = false;
+		}
+		struct RequiredFlags
+		{
+			static foreach(member; __traits(allMembers, V))
+				static if (proccess!member)
+					static if (hasRequired([getUDAs!(__traits(getMember, value, member), Serialization)]))
+						mixin ("bool " ~ member ~ ";");
+		}
+		RequiredFlags requiredFlags;
 		foreach(elem; data.byKeyValue)
 		{
 			switch(elem.key)
 			{
 				foreach(member; __traits(allMembers, V))
 				{
-					enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
-					static if(
-						(
-							proper
-							||
-							__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
-							&&
-							isCallable!(__traits(getMember, value, member))
-							&&
-							functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
-							&&
-							Parameters!(__traits(getMember, value, member)).length == 1
-						)
-						&&
-						!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+					static if (proccess!member)
 					{
 						enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 						enum F = isFlexible(V.stringof, member, udas);
@@ -1944,7 +1986,9 @@ void deserializeValue(V)(Asdf data, ref V value)
 				case key:
 
 							}
-							static if(!proper)
+							static if (hasRequired(udas))
+								__traits(getMember, requiredFlags, member) = true;
+							static if(!proper!member)
 							{
 								alias Type = Parameters!(__traits(getMember, value, member));
 							}
@@ -1991,7 +2035,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 								__traits(getMember, value, member) = proxy.to!Type;
 							}
 							else
-							static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+							static if(proper!member && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 							{
 								enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
 								alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2025,21 +2069,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 		foreach(member; __traits(allMembers, V))
 		{
-			enum proper = __traits(compiles, __traits(getMember, value, member) = __traits(getMember, value, member));
-			static if(
-				(
-					proper
-					||
-					__traits(compiles, {auto _ptr = &__traits(getMember, value, member);})
-					&&
-					isCallable!(__traits(getMember, value, member))
-					&&
-					functionAttributes!(__traits(getMember, value, member)) & FunctionAttribute.property
-					&&
-					Parameters!(__traits(getMember, value, member)).length == 1
-				)
-				&&
-				!__traits(getProtection, __traits(getMember, value, member)).privateOrPackage)
+			static if (proccess!member)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
 				enum F = isFlexible(V.stringof, member, udas);
@@ -2054,7 +2084,9 @@ void deserializeValue(V)(Asdf data, ref V value)
 							auto d = data[ser];
 							if(d.data.length)
 							{
-								static if(!proper)
+								static if (hasRequired(udas))
+									__traits(getMember, requiredFlags, member) = true;
+								static if(!proper!member)
 								{
 									alias Type = Parameters!(__traits(getMember, value, member));
 								}
@@ -2101,7 +2133,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 									__traits(getMember, value, member) = proxy.to!Type;
 								}
 								else
-								static if(proper && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+								static if(proper!member && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
 								{
 									enum S = isScoped(V.stringof, member, udas) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
 									alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2130,6 +2162,13 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
+		foreach(member; __traits(allMembers, RequiredFlags))
+		{{
+			static immutable e = new AsdfException(
+				"ASDF deserialisation: Required member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
+			if (!__traits(getMember, requiredFlags, member))
+				throw e;
+		}}
 		static if(__traits(hasMember, V, "finalizeDeserialization"))
 		{
 			value.finalizeDeserialization(data);
@@ -2311,7 +2350,7 @@ private string[] keysIn(string type, string member, Serialization[] attrs)
 		` : Only single declaration of "keys" / "keys-in" serialization attribute is allowed`);
 }
 
-private bool ignoreOut(Serialization[] attrs)
+private bool ignoreOut()(Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind;
 	return attrs.canFind!(a => 
@@ -2321,7 +2360,7 @@ private bool ignoreOut(Serialization[] attrs)
 			);
 }
 
-private bool ignoreIn(Serialization[] attrs)
+private bool ignoreIn()(Serialization[] attrs)
 {
 	import std.algorithm.searching: canFind;
 	return attrs.canFind!(a => 
@@ -2331,8 +2370,13 @@ private bool ignoreIn(Serialization[] attrs)
 			);
 }
 
+private bool hasRequired()(Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind;
+	return attrs.canFind!(a => a.args == ["required"]);
+}
 
-private bool privateOrPackage(string protection)
+private bool privateOrPackage()(string protection)
 {
 	return protection == "private" || protection == "package";
 }
