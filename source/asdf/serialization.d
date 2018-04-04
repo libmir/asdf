@@ -762,7 +762,7 @@ unittest
 }
 
 /// JSON serialization back-end
-struct JsonSerializer(string sep)
+struct JsonSerializer(string sep, Dg)
 {
 	import asdf.jsonbuffer;
 
@@ -788,12 +788,12 @@ struct JsonSerializer(string sep)
 
 
 	/// JSON string buffer
-	JsonBuffer sink;
+	JsonBuffer!Dg sink;
 
 	///
-	this(void delegate(const(char)[]) pure sink)
+	this(Dg sink)
 	{
-		this.sink.sink = sink;
+		this.sink = JsonBuffer!Dg(sink);
 	}
 
 	private uint state;
@@ -979,9 +979,9 @@ struct JsonSerializer(string sep)
 Creates JSON serialization back-end.
 Use `sep` equal to `"\t"` or `"    "` for pretty formatting.
 +/
-auto jsonSerializer(string sep = "")(scope void delegate(const(char)[]) pure sink)
+auto jsonSerializer(string sep = "", Dg)(scope Dg sink)
 {
-	return JsonSerializer!sep(sink);
+	return JsonSerializer!(sep, Dg)(sink);
 }
 
 ///
