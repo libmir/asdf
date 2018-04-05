@@ -271,7 +271,7 @@ struct S
 @serializedAs!ProxyE
 enum E
 {
-	foo,
+	none,
 	bar,
 }
 
@@ -288,19 +288,26 @@ struct ProxyE
 
 	this(in char[] str)
 	{
-		if (str == "FOO")
-			e =  E.foo;
-		else
-		if (str == "BAR")
-			e = E.bar;
-		else
-			throw new Exception("Unknown: " ~ cast(string)str);
+		switch(str)
+		{
+			case "NONE":
+			case "NA":
+			case "N/A":
+				e = E.none;
+				break;
+			case "BAR":
+			case "BR":
+				e = E.bar;
+				break;
+			default:
+				throw new Exception("Unknown: " ~ cast(string)str);
+		}
 	}
 
 	string toString()
 	{
-		if (e == E.foo)
-			return "FOO";
+		if (e == E.none)
+			return "NONE";
 		else
 			return "BAR";
 	}
@@ -313,8 +320,9 @@ struct ProxyE
 
 unittest
 {
-	assert(serializeToJson(E.foo) == `"FOO"`);
-	assert(`"FOO"`.deserialize!E == E.foo);
+	assert(serializeToJson(E.bar) == `"BAR"`);
+	assert(`"N/A"`.deserialize!E == E.none);
+	assert(`"NA"`.deserialize!E == E.none);
 }
 ```
 

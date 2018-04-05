@@ -393,58 +393,66 @@ unittest
 
 
 /++
-Serialization proxy for aggregation types.
+Serialization proxy for structs, classes, and enums.
 
 Example: Proxy for types.
 ----
-	@serializedAs!ProxyE
-	enum E
+@serializedAs!ProxyE
+enum E
+{
+	none,
+	bar,
+}
+
+// const(char)[] doesn't reallocate ASDF data.
+@serializedAs!(const(char)[])
+struct ProxyE
+{
+	E e;
+
+	this(E e)
 	{
-		foo,
-		bar,
+		this.e = e;
 	}
 
-	// const(char)[] doesn't reallocate ASDF data.
-	@serializedAs!(const(char)[])
-	struct ProxyE
+	this(in char[] str)
 	{
-		E e;
-
-		this(E e)
+		switch(str)
 		{
-			this.e = e;
-		}
-
-		this(in char[] str)
-		{
-			if (str == "FOO")
-				e =  E.foo;
-			else
-			if (str == "BAR")
+			case "NONE":
+			case "NA":
+			case "N/A":
+				e = E.none;
+				break;
+			case "BAR":
+			case "BR":
 				e = E.bar;
-			else
+				break;
+			default:
 				throw new Exception("Unknown: " ~ cast(string)str);
 		}
-
-		string toString()
-		{
-			if (e == E.foo)
-				return "FOO";
-			else
-				return "BAR";
-		}
-
-		E opCast(T : E)()
-		{
-			return e;
-		}
 	}
 
-	unittest
+	string toString()
 	{
-		assert(serializeToJson(E.foo) == `"FOO"`);
-		assert(`"FOO"`.deserialize!E == E.foo);
+		if (e == E.none)
+			return "NONE";
+		else
+			return "BAR";
 	}
+
+	E opCast(T : E)()
+	{
+		return e;
+	}
+}
+
+unittest
+{
+	assert(serializeToJson(E.bar) == `"BAR"`);
+	assert(`"N/A"`.deserialize!E == E.none);
+	assert(`"NA"`.deserialize!E == E.none);
+}
 ----
 +/
 struct serializedAs(T){}
@@ -469,7 +477,7 @@ version(unittest) private
 	@serializedAs!ProxyE
 	enum E
 	{
-		foo,
+		none,
 		bar,
 	}
 
@@ -486,19 +494,26 @@ version(unittest) private
 
 		this(in char[] str)
 		{
-			if (str == "FOO")
-				e =  E.foo;
-			else
-			if (str == "BAR")
-				e = E.bar;
-			else
-				throw new Exception("Unknown: " ~ cast(string)str);
+			switch(str)
+			{
+				case "NONE":
+				case "NA":
+				case "N/A":
+					e = E.none;
+					break;
+				case "BAR":
+				case "BR":
+					e = E.bar;
+					break;
+				default:
+					throw new Exception("Unknown: " ~ cast(string)str);
+			}
 		}
 
 		string toString()
 		{
-			if (e == E.foo)
-				return "FOO";
+			if (e == E.none)
+				return "NONE";
 			else
 				return "BAR";
 		}
@@ -511,8 +526,9 @@ version(unittest) private
 
 	unittest
 	{
-		assert(serializeToJson(E.foo) == `"FOO"`);
-		assert(`"FOO"`.deserialize!E == E.foo);
+		assert(serializeToJson(E.bar) == `"BAR"`);
+		assert(`"N/A"`.deserialize!E == E.none);
+		assert(`"NA"`.deserialize!E == E.none);
 	}
 }
 
@@ -1530,7 +1546,7 @@ void serializeValue(S, N)(ref S serializer, auto ref N value)
 	serializer.putValue(value.get);
 }
 
-/// Aggregation type serialization
+/// Struct and class type serialization
 void serializeValue(S, V)(ref S serializer, auto ref V value)
 	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
 {
