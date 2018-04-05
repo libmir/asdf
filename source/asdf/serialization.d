@@ -2153,7 +2153,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 								__traits(getMember, requiredFlags, member) = true;
 							static if(!proper!member)
 							{
-								alias Type = Parameters!(__traits(getMember, value, member));
+								alias Type = Unqual!(Parameters!(__traits(getMember, value, member)));
 							}
 							else
 							{
@@ -2328,12 +2328,14 @@ void deserializeValue(V)(Asdf data, ref V value)
 			}
 		}
 		foreach(member; __traits(allMembers, RequiredFlags))
-		{{
-			static immutable e = new AsdfException(
-				"ASDF deserialisation: Required member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
+		{
 			if (!__traits(getMember, requiredFlags, member))
-				throw e;
-		}}
+				throw () { 
+					static immutable exc = new AsdfException(
+				"ASDF deserialisation: Required member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
+					return exc;
+				} ();
+		}
 		static if(__traits(hasMember, V, "finalizeDeserialization"))
 		{
 			value.finalizeDeserialization(data);
