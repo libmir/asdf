@@ -267,6 +267,65 @@ struct S
 }
 ```
 
+```
+@serializedAs!ProxyE
+enum E
+{
+	none,
+	bar,
+}
+
+// const(char)[] doesn't reallocate ASDF data.
+@serializedAs!(const(char)[])
+struct ProxyE
+{
+	E e;
+
+	this(E e)
+	{
+		this.e = e;
+	}
+
+	this(in char[] str)
+	{
+		switch(str)
+		{
+			case "NONE":
+			case "NA":
+			case "N/A":
+				e = E.none;
+				break;
+			case "BAR":
+			case "BR":
+				e = E.bar;
+				break;
+			default:
+				throw new Exception("Unknown: " ~ cast(string)str);
+		}
+	}
+
+	string toString()
+	{
+		if (e == E.none)
+			return "NONE";
+		else
+			return "BAR";
+	}
+
+	E opCast(T : E)()
+	{
+		return e;
+	}
+}
+
+unittest
+{
+	assert(serializeToJson(E.bar) == `"BAR"`);
+	assert(`"N/A"`.deserialize!E == E.none);
+	assert(`"NA"`.deserialize!E == E.none);
+}
+```
+
 
 ##### Finalizer
 If you need to do additional calculations or etl transformations that happen to depend on the deserialized data use the `finalizeDeserialization` method.
