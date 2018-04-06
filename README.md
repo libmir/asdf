@@ -134,7 +134,7 @@ void main()
 	File("input.jsonl")
 		// Use at least 4096 bytes for real wolrd apps
 		.byChunk(4096)
-		// 32 is minimal value for internal buffer. Buffer can be realocated to get more memory.
+		// 32 is minimal value for internal buffer. Buffer can be reallocated to get more memory.
 		.parseJsonByLine(4096)
 		.filter!(object => object
 			// opIndex accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
@@ -181,8 +181,8 @@ struct S
 {
 	string a;
 	long b;
-	private int c; // private feilds are ignored
-	package int d; // package feilds are ignored
+	private int c; // private fields are ignored
+	package int d; // package fields are ignored
 	// all other fields in JSON are ignored
 }
 ```
