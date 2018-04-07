@@ -238,7 +238,7 @@ struct DateTimeProxy
 }
 ```
 
-```
+```d
 //serialize a Doubly Linked list into an Array
 struct SomeDoublyLinkedList
 {
@@ -267,7 +267,7 @@ struct S
 }
 ```
 
-```
+```d
 @serializedAs!ProxyE
 enum E
 {
