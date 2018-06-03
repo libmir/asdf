@@ -73,7 +73,7 @@ Asdf parseJson(
     import std.conv: ConvException;
     enum assumeValid = false;
     import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, Chunks)(GCAllocator.instance, chunks);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared const GCAllocator, Chunks)(GCAllocator.instance, chunks);
     if (parser.parse)
         throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
@@ -121,8 +121,7 @@ Asdf parseJson(
 {
     import std.experimental.allocator;
     import std.experimental.allocator.gc_allocator;
-    shared GCAllocator inst;
-    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared GCAllocator, const(char)[])(inst, str);
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared const GCAllocator, const(char)[])(GCAllocator.instance, str);
     if (parser.parse)
         throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
@@ -160,7 +159,7 @@ auto parseJsonByLine(
     (Input input)
 {
     import std.experimental.allocator.gc_allocator;
-    alias Parser = JsonParser!(false, cast(bool)spaces, false, shared GCAllocator, Input);
+    alias Parser = JsonParser!(false, cast(bool)spaces, false, shared const GCAllocator, Input);
     struct ByLineValue
     {
         Parser parser;
