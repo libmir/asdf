@@ -362,13 +362,88 @@ unittest
 	assert(serializeToAsdf(S("str", 4)).to!string == `{"foo":"str","bar":4}`);
 }
 
+/// Check if type T has static templated method allowing to 
+/// deserialize instance of T from range R like
+/// ```
+///     R r;
+///     ...
+///     auto t = T.deserialize(r); // ok
+/// ```
+private template hasStaticTemplatedDeserialize(T, R)
+{
+	import std.traits : hasMember;
+
+	static if (
+		// T shall have the method `deserialize`
+		hasMember!(T, "deserialize") &&
+		// this method shall be templated
+		__traits(isTemplate, T.deserialize))
+	{
+		// this method shall be templated by R type,
+		// takes it as only argument and
+		static assert(is(typeof(T.deserialize(R.init))), 
+			"To be usable with Asdf library signature of `" ~ T.stringof ~ ".deserialize` shall be the following: `deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)`. (* Now it has " ~ __traits(getMember, T, "deserialize").stringof ~ " *). If it exists check if it compiles.");
+		// returns result of T type);
+		static assert(is(typeof(T.deserialize(R.init)) == T), 
+			"To be usable with Asdf library method `" ~ T.stringof ~ ".deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)` shall have return type `" ~ T.stringof ~ "` instead of `" ~ typeof(T.deserialize(R.init)).stringof ~ "`");
+		enum hasStaticTemplatedDeserialize = true;
+	}
+	else
+	{
+		enum hasStaticTemplatedDeserialize = false;
+	}
+}
 
 /// Deserialization function
 V deserialize(V)(Asdf data)
 {
-	V value;
-	deserializeValue(data, value);
-	return value;
+	static if (hasStaticTemplatedDeserialize!(V, Asdf))
+	{
+		return V.deserialize(data);
+	}
+	else
+	{
+		V value;
+		deserializeValue(data, value);
+		return value;
+	}
+}
+
+/// Serializing struct Foo with disabled default ctor
+unittest
+{
+	static struct Foo
+	{
+		int i;
+
+		@disable
+		this();
+
+		this(int i)
+		{
+			this.i = i;
+		}
+
+		static auto deserialize(D)(auto ref D deserializer)
+		{
+			import asdf : deserialize;
+
+			foreach(elem; deserializer.byKeyValue)
+			{
+				switch(elem.key)
+				{
+					case "i":
+						int i = elem.value.to!int;
+						return typeof(this)(i);
+					default:
+				}
+			}
+
+			return typeof(this).init;
+		}
+	}
+
+	assert(deserialize!Foo(serializeToAsdf(Foo(6))) == Foo(6));
 }
 
 /// ditto
@@ -1888,18 +1963,37 @@ unittest
 void deserializeValue(V : T[], T)(Asdf data, ref V value)
 	if(!isSomeChar!T && !isStaticArray!V)
 {
-	auto kind = data.kind;
+	const kind = data.kind;
 	with(Asdf.Kind) switch(kind)
 	{
 		case array:
 			import std.algorithm.searching: count;
 			auto elems = data.byElement;
-			value = new T[elems.save.count];
-			foreach(ref e; value)
+			// create array of properly initialized (by means of ctor) elements
+			static if (__traits(compiles, {value = new T[elems.save.count];}))
 			{
-				.deserializeValue(elems.front, e);
-				elems.popFront;
+				value = new T[elems.save.count];
+				foreach(ref e; value)
+				{
+					.deserializeValue(elems.front, e);
+					elems.popFront;
+				}
 			}
+			else static if (hasStaticTemplatedDeserialize!(T, Asdf))
+			{
+				// create array of uninitialized elements
+				// and initialize them using static `deserialize`
+
+				import std.array : uninitializedArray;
+				value = uninitializedArray!(T[])(elems.save.count); 
+				foreach(ref e; value)
+				{
+					e = T.deserialize(elems.front);
+					elems.popFront;
+				}
+			}
+			else
+				static assert(0, "Type `" ~ T.stringof ~ "` should have either default ctor or static `T.deserialize(R)(R r)` method!");
 			assert(elems.empty);
 			return;
 		case null_:
@@ -1917,6 +2011,46 @@ unittest
 	assert(deserialize!(int[])(serializeToAsdf(null)) is null);
 	assert(deserialize!(int[])(serializeToJson([1, 3, 4])) == [1, 3, 4]);
 	assert(deserialize!(int[])(serializeToAsdf([1, 3, 4])) == [1, 3, 4]);
+}
+
+///
+unittest
+{
+	static struct Foo
+	{
+		int i;
+
+		@disable
+		this();
+
+		this(int i)
+		{
+			this.i = i;
+		}
+
+		static auto deserialize(D)(auto ref D deserializer)
+		{
+			import asdf : deserialize;
+
+			foreach(elem; deserializer.byKeyValue)
+			{
+				switch(elem.key)
+				{
+					case "i":
+						int i = elem.value.to!int;
+						return typeof(this)(i);
+					default:
+				}
+			}
+
+			return typeof(this).init;
+		}
+	}
+
+	assert(deserialize!(Foo[])(serializeToJson(null)) is null);
+	assert(deserialize!(Foo[])(serializeToAsdf(null)) is null);
+	assert(deserialize!(Foo[])(serializeToJson([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
+	assert(deserialize!(Foo[])(serializeToAsdf([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
 }
 
 /// Deserialize static array
