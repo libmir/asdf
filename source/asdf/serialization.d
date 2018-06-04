@@ -303,6 +303,20 @@ class DeserializationException: AsdfException
 		this.func = func;
 		super(msg, file, line, next);
 	}
+
+	///
+	this(
+		ubyte kind,
+		string msg,
+		Throwable next,
+		string func = __PRETTY_FUNCTION__,
+		string file = __FILE__,
+		size_t line = __LINE__,
+		) pure nothrow @nogc @safe 
+	{
+		this(kind, msg, func, file, line, next);
+	}
+
 }
 
 /// JSON serialization function.
@@ -2218,7 +2232,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	{
 		value = V.deserialize(data);
 	}
-	else
+	else try
 	{
 		auto kind = data.kind;
 		if(kind != Asdf.Kind.object)
@@ -2367,7 +2381,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 			}
 		}
 		foreach(member; __traits(allMembers, V))
-		{
+		try {
 			static if (proccess!member)
 			{
 				enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
@@ -2461,6 +2475,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 			}
 		}
+		catch (AsdfException e)
+		{
+			throw new DeserializationException(Asdf.Kind.object, "Failed to deserialise member" ~ member, e);
+		}
 		foreach(member; __traits(allMembers, RequiredFlags))
 		{
 			if (!__traits(getMember, requiredFlags, member))
@@ -2474,6 +2492,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 		{
 			value.finalizeDeserialization(data);
 		}
+	}
+	catch (AsdfException e)
+	{
+		throw new DeserializationException(Asdf.Kind.object, "Failed to deserialis type " ~ V.stringof, e);
 	}
 }
 
