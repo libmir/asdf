@@ -53,6 +53,12 @@ else
 version(X86)
     version = X86_Any;
 
+import std.experimental.allocator.gc_allocator;
+static if (__VERSION__ < 2.080)
+    private alias ASDFGCAllocator = shared GCAllocator;
+else
+    private alias ASDFGCAllocator = shared const GCAllocator;
+
 /++
 Parses json value
 Params:
@@ -72,8 +78,8 @@ Asdf parseJson(
     import std.format: format;
     import std.conv: ConvException;
     enum assumeValid = false;
-    import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared const GCAllocator, Chunks)(GCAllocator.instance, chunks);
+    ASDFGCAllocator allocator;
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, ASDFGCAllocator, Chunks)(allocator, chunks);
     if (parser.parse)
         throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
@@ -120,8 +126,8 @@ Asdf parseJson(
     (in char[] str)
 {
     import std.experimental.allocator;
-    import std.experimental.allocator.gc_allocator;
-    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, shared const GCAllocator, const(char)[])(GCAllocator.instance, str);
+    ASDFGCAllocator allocator;
+    auto parser = JsonParser!(includingNewLine, spaces, assumeValid, ASDFGCAllocator, const(char)[])(allocator, str);
     if (parser.parse)
         throw new AsdfException(parser.lastError);
     return Asdf(parser.result);
@@ -158,8 +164,7 @@ auto parseJsonByLine(
     Input)
     (Input input)
 {
-    import std.experimental.allocator.gc_allocator;
-    alias Parser = JsonParser!(false, cast(bool)spaces, false, shared const GCAllocator, Input);
+    alias Parser = JsonParser!(false, cast(bool)spaces, false, ASDFGCAllocator, Input);
     struct ByLineValue
     {
         Parser parser;
@@ -224,7 +229,8 @@ auto parseJsonByLine(
     }
     else
     {
-        ret = ByLineValue(Parser(GCAllocator.instance, input));
+        ASDFGCAllocator allocator;
+        ret = ByLineValue(Parser(allocator, input));
         ret.popFront;
     }
     return ret;
