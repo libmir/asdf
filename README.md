@@ -13,9 +13,9 @@ Besides, it is a convenient Json Library for D that gets out of your way.
 ASDF is specially geared towards transforming high volumes of JSON dataframes, either to new 
 JSON Objects or to custom data types.
 
-❗️: Currently all ASDF Method names and all UDAs are in DRAFT state, we might want want make them simpler. Please submit an Issue if you have input.
-
 #### Why ASDF?
+
+asdf was originally developed at [Tamedia](https://www.tamedia.ch/) to extract and transform real-time click streams.
 
 - ASDF is fast. It can be really helpful if you have gigabytes of JSON line separated values.
 - ASDF is simple. It uses D's modelling power to make you write less boilerplate code.
