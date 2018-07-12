@@ -1,10 +1,10 @@
 [![Dub version](https://img.shields.io/dub/v/asdf.svg)](http://code.dlang.org/packages/asdf)
 [![Dub downloads](https://img.shields.io/dub/dt/asdf.svg)](http://code.dlang.org/packages/asdf)
 [![License](https://img.shields.io/dub/l/asdf.svg)](http://code.dlang.org/packages/asdf)
-[![codecov.io](https://codecov.io/github/tamediadigital/asdf/coverage.svg?branch=master)](https://codecov.io/github/tamediadigital/asdf?branch=master)
-[![Build Status](https://travis-ci.org/tamediadigital/asdf.svg?branch=master)](https://travis-ci.org/tamediadigital/asdf)
-[![Circle CI Docs](https://circleci.com/gh/tamediadigital/asdf.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/tamediadigital/asdf)
-[![Build status](https://ci.appveyor.com/api/projects/status/6o7707y5bk4vxn29?svg=true)](https://ci.appveyor.com/project/yannick/asdf)
+[![codecov.io](https://codecov.io/github/libmir/asdf/coverage.svg?branch=master)](https://codecov.io/github/tamediadigital/asdf?branch=master)
+[![Build Status](https://travis-ci.org/libmir/asdf.svg?branch=master)](https://travis-ci.org/libmir/asdf)
+[![Circle CI Docs](https://circleci.com/gh/libmir/asdf.svg?style=shield&circle-token=:circle-ci-badge-token)](https://circleci.com/gh/libmir/asdf)
+[![Build status](https://ci.appveyor.com/api/projects/status/libmir/asdf?svg=true)](https://ci.appveyor.com/project/9il/asdf-sesrc)
 
 # A Simple Document Format
 
