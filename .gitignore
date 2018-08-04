@@ -49,3 +49,4 @@ source/old.d
 *.lib
 *.exe
 .vs
+build/
