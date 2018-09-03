@@ -811,7 +811,7 @@ unittest
 		UUID id;
 	}
 	assert(`{"id":"8AB3060E-2cba-4f23-b74c-b52db3bdfb46"}`.deserialize!S.id
-				==  UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46"));
+				== UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46"));
 }
 
 /++
@@ -2120,6 +2120,7 @@ void deserializeValue(V : T[string], T)(Asdf data, ref V value)
 			}
 			return;
 		case null_:
+			value = null;
 			return;
 		default:
 			throw new DeserializationException(kind);
@@ -2133,6 +2134,13 @@ unittest
 	assert(deserialize!(int[string])(serializeToAsdf(null)) is null);
 	assert(deserialize!(int[string])(serializeToJson(["a" : 1, "b" : 2])) == ["a" : 1, "b" : 2]);
 	assert(deserialize!(int[string])(serializeToAsdf(["a" : 1, "b" : 2])) == ["a" : 1, "b" : 2]);
+}
+
+unittest
+{
+	int[string] r = ["a" : 1];
+	serializeToAsdf(null).deserializeValue(r);
+	assert(r is null);
 }
 
 /// Deserialize enumeration-value associative array
@@ -2151,6 +2159,7 @@ void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
 			}
 			return;
 		case null_:
+			value = null;
 			return;
 		default:
 			throw new DeserializationException(kind);
@@ -2165,6 +2174,14 @@ unittest
 	assert(deserialize!(int[E])(serializeToAsdf(null)) is null);
 	assert(deserialize!(int[E])(serializeToJson([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
 	assert(deserialize!(int[E])(serializeToAsdf([E.a : 1, E.b : 2])) == [E.a : 1, E.b : 2]);
+}
+
+unittest
+{
+	enum E {a, b}
+	int[E] r = [E.a : 1];
+	serializeToAsdf(null).deserializeValue(r);
+	assert(r is null);
 }
 
 /// Deserialize associative array with integral type key
@@ -2183,6 +2200,7 @@ void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
             }
             return;
         case null_:
+            value = null;
             return;
         default:
             throw new DeserializationException(kind);
@@ -2196,6 +2214,13 @@ unittest
 	assert(deserialize!(int[int])(serializeToAsdf(null)) is null);
 	assert(deserialize!(int[int])(serializeToJson([2 : 1, 40 : 2])) == [2 : 1, 40 : 2]);
 	assert(deserialize!(int[int])(serializeToAsdf([2 : 1, 40 : 2])) == [2 : 1, 40 : 2]);
+}
+
+unittest
+{
+	int[int] r = [3 : 1];
+	serializeToAsdf(null).deserializeValue(r);
+	assert(r is null);
 }
 
 /// Deserialize Nullable value
@@ -2565,7 +2590,7 @@ unittest
 	static assert(!hasSerializedAs!foo);
 }
 
-private alias getSerializedAs(T :  serializedAs!Proxy, Proxy) = Proxy;
+private alias getSerializedAs(T : serializedAs!Proxy, Proxy) = Proxy;
 private alias getTransformIn(T) = T.transform;
 private alias getTransformOut(T) = T.transform;
 
