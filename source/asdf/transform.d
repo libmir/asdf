@@ -61,7 +61,7 @@ pure:
 	}
 
 	///
-	ref AsdfNode opIndex(scope const(char)[][] keys...)
+	ref AsdfNode opIndex(scope const(char)[][] keys...) scope return
 	{
 		if(keys.length == 0)
 			return this;

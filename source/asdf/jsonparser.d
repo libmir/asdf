@@ -1318,17 +1318,3 @@ q{{
   "info": "some info"
 }
 };
-
-unittest
-{
-    import std.algorithm.iteration: map;
-    import std.string;
-    import std.range;
-    import std.conv;
-    auto a = parseJson(test_data);
-    ubyte[test_data.length] buff; // simulates File.byChunk behavior
-    foreach(i; 1 .. test_data.length)
-    {
-        assert(a == parseJson(test_data.representation.chunks(i).map!((front => buff[0 .. front.length] = front))));
-    }
-}
