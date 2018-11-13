@@ -25,14 +25,6 @@ asdf_dep = declare_dependency(
     include_directories: asdf_dir,
 )
 
-asdf_test_exe = executable(meson.project_name() + '-test',
-    asdf_src,
-    include_directories: asdf_dir,
-    d_unittest: true,
-    d_module_versions: ['mir_test'],
-    link_args: '-main',
-)
-
 install_subdir('source/',
     strip_directory : true,
     install_dir: 'include/d/' + meson.project_name(),
@@ -46,4 +38,16 @@ import('pkgconfig').generate(
     version: meson.project_version(),
 )
 
-test(meson.project_name() + '-test', asdf_test_exe)
+if get_option('with_test')
+
+    asdf_test_exe = executable(meson.project_name() + '-test',
+        asdf_src,
+        include_directories: asdf_dir,
+        d_unittest: true,
+        d_module_versions: ['mir_test'],
+        link_args: '-main',
+    )
+
+    test(meson.project_name() + '-test', asdf_test_exe)
+
+endif
