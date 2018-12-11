@@ -1465,6 +1465,12 @@ void serializeValue(S)(ref S serializer, bool value)
 	serializer.putValue(value);
 }
 
+/// Char serialization
+void serializeValue(S)(ref S serializer, char value)
+{
+	serializer.putValue([value]);
+}
+
 ///
 unittest
 {
@@ -1523,6 +1529,41 @@ void serializeValue(S, T)(ref S serializer, T[] value)
 		serializer.serializeValue(elem);
 	}
 	serializer.arrayEnd(state);
+}
+
+/// Input range serialization
+void serializeValue(S, R)(ref S serializer, R value) 
+	if ((isInputRange!R) && 
+		!isSomeChar!(ElementType!R) && 
+		!isDynamicArray!R &&
+		!isNullable!R)
+{
+	auto state = serializer.arrayBegin();
+	foreach (ref elem; value)
+	{
+		serializer.elemBegin;
+		serializer.serializeValue(elem);
+	}
+	serializer.arrayEnd(state);
+}
+
+/// input range serialization
+unittest
+{
+	import std.algorithm : filter;
+
+	struct Foo
+	{
+		int i;
+	}
+
+	auto ar = [Foo(1), Foo(3), Foo(4), Foo(17)];
+	
+	auto filtered1 = ar.filter!"a.i & 1";
+	auto filtered2 = ar.filter!"!(a.i & 1)";
+
+	assert(serializeToJson(filtered1) == `[{"i":1},{"i":3},{"i":17}]`);
+	assert(serializeToJson(filtered2) == `[{"i":4}]`);
 }
 
 ///
@@ -1607,7 +1648,7 @@ void serializeValue(S, T, K)(ref S serializer, auto ref T[K] value)
 		import std.format : sformat;
 		auto str = sformat(buffer[], "%d", key);
 		serializer.putEscapedKey(str);
-		serializer.putValue(val);
+		.serializeValue(serializer, val);
 	}
 	serializer.objectEnd(state);
 }
@@ -1632,12 +1673,35 @@ void serializeValue(S, N)(ref S serializer, auto ref N value)
 		serializer.putValue(null);
 		return;
 	}
-	serializer.putValue(value.get);
+	serializer.serializeValue(value.get);
+}
+
+///
+unittest
+{
+	import std.typecons;
+
+	struct Nested
+	{
+		float f;
+	}
+
+	struct T
+	{
+		string str;
+		Nullable!Nested nested;
+	}
+
+	T t;
+	assert(t.serializeToJson == `{"str":null,"nested":null}`);
+	t.str = "txt";
+	t.nested = Nested(123);
+	assert(t.serializeToJson == `{"str":"txt","nested":{"f":123}}`);
 }
 
 /// Struct and class type serialization
 void serializeValue(S, V)(ref S serializer, auto ref V value)
-	if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
+	if(!isNullable!V && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
 {
 	static if(is(V == class) || is(V == interface))
 	{
@@ -1911,7 +1975,7 @@ Deserializes string value.
 This function allocates new string.
 +/
 void deserializeValue(V)(Asdf data, ref V value)
-	if(is(V : const(char)[]))
+	if(is(V : const(char)[]) && !is(V == enum))
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
@@ -1925,6 +1989,30 @@ void deserializeValue(V)(Asdf data, ref V value)
 		default:
 			throw new DeserializationException(kind);
 	}
+}
+
+/// issue #94/#95
+unittest
+{
+	enum SimpleEnum : string
+	{
+		se1 = "se1value",
+		se2 = "se1value"
+	}
+
+	struct Simple
+	{
+		SimpleEnum en;
+	}
+
+	Simple simple = `{"en":"se1"}`.deserialize!(Simple);
+}
+
+/// Deserialize single char
+void deserializeValue(Asdf data, char value)
+{
+	auto v = cast(char[1])[value];
+	deserializeValue(data, v);
 }
 
 ///
@@ -2040,6 +2128,21 @@ void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
 	{
+		static if(is(T == char))
+		{
+		case string:
+			auto str = cast(immutable(char)[]) data;
+			// if source is shorter than destination fill the rest by zeros
+			// if source is longer copy only needed part of it
+			if (str.length > value.length)
+				str = str[0..value.length];
+			else
+				value[] = '\0';
+
+			import std.algorithm : copy;
+			copy(str, value[]);
+			return;
+		}
 		case array:
 			auto elems = data.byElement;
 			foreach(ref e; value)
@@ -2066,6 +2169,23 @@ unittest
 	assert(deserialize!(int[4])(serializeToAsdf([1, 3, 4])) == [1, 3, 4, 0]);
 	assert(deserialize!(int[2])(serializeToJson([1, 3, 4])) == [1, 3]);
 	assert(deserialize!(int[2])(serializeToAsdf([1, 3, 4])) == [1, 3]);
+
+	assert(deserialize!(char[2])(serializeToAsdf(['a','b'])) == ['a','b']);
+	assert(deserialize!(char[2])(serializeToAsdf(['a','\0'])) == ['a','\0']);
+	assert(deserialize!(char[2])(serializeToAsdf(['a','\255'])) == ['a','\255']);
+	assert(deserialize!(char[2])(serializeToAsdf(['\255'])) == ['\255','\0']);
+	assert(deserialize!(char[2])(serializeToAsdf(['\255', '\255', '\255'])) == ['\255','\255']);
+}
+
+/// AA with value of aggregate type
+unittest
+{
+	struct Foo
+	{
+		
+	}
+
+	assert (deserialize!(Foo[int])(serializeToJson([1: Foo()])) == [1:Foo()]);
 }
 
 /// Deserialize string-value associative array
@@ -2199,6 +2319,29 @@ void deserializeValue(V)(Asdf data, ref V value)
 	typeof(value.get) payload;
 	.deserializeValue(data, payload);
 	value = payload;
+}
+
+///
+unittest
+{
+	import std.typecons;
+
+	struct Nested
+	{
+		float f;
+	}
+
+	struct T
+	{
+		string str;
+		Nullable!Nested nested;
+	}
+
+	T t;
+	assert(deserialize!T(`{"str":null,"nested":null}`) == t);
+	t.str = "txt";
+	t.nested = Nested(123);
+	assert(deserialize!T(`{"str":"txt","nested":{"f":123}}`) == t);
 }
 
 private static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
