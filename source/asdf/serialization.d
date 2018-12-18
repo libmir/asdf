@@ -2023,13 +2023,6 @@ unittest
 	assert(Example().serializeToJson == `{"field1":null}`);
 }
 
-/// Deserialize single char
-void deserializeValue(Asdf data, char value)
-{
-	auto v = cast(char[1])[value];
-	deserializeValue(data, v);
-}
-
 ///
 unittest
 {
@@ -2037,6 +2030,20 @@ unittest
 	assert(deserialize!string(serializeToAsdf(null)) is null);
 	assert(deserialize!string(serializeToJson("\tbar")) == "\tbar");
 	assert(deserialize!string(serializeToAsdf("\"bar")) == "\"bar");
+}
+
+/// Deserialize single char
+void deserializeValue(V)(Asdf data, ref V value)
+	if (is(V == char))
+{
+	deserializeValue(data, *(()@trusted=> cast(char[1]*)&value)());
+}
+
+///
+unittest
+{
+	assert(deserialize!char(`"a"`) == 'a');
+	assert(deserialize!byte(`-4`) == -4); // regression control
 }
 
 /// Deserialize array
