@@ -2128,7 +2128,7 @@ void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
 	{
-		static if(is(T == char))
+		static if(is(Unqual!T == char))
 		{
 		case string:
 			auto str = cast(immutable(char)[]) data;
@@ -2156,7 +2156,7 @@ void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 		case null_:
 			return;
 		default:
-			throw new DeserializationException(kind);
+			throw new DeserializationException(kind, "Failed to deserialize value of " ~ T[N].stringof);
 	}
 }
 
@@ -2609,6 +2609,10 @@ void deserializeValue(V)(Asdf data, ref V value)
 		{
 			value.finalizeDeserialization(data);
 		}
+	}
+	catch (DeserializationException e)
+	{
+		throw e;
 	}
 	catch (AsdfException e)
 	{
