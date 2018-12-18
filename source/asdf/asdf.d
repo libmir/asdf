@@ -356,7 +356,7 @@ struct Asdf
 			private ubyte[] _data;
 			private Asdf _front;
 
-			auto save() pure @property
+			auto save()() pure @property
 			{
 				return this;
 			}
