@@ -12,7 +12,7 @@ pure unittest
 	import std.datetime;
 	import std.conv;
 
-	enum E
+	enum E : char
 	{
 		a,
 		b, 
@@ -684,7 +684,7 @@ pure unittest
 }
 
 /++
-Attribute that force deserialiser to throw an exception that the field was not found in the input.
+Attribute that force deserializer to throw an exception that the field was not found in the input.
 +/
 enum serializationRequired = serialization("required");
 
@@ -1460,15 +1460,18 @@ unittest
 }
 
 /// Boolean serialization
-void serializeValue(S)(ref S serializer, bool value)
+void serializeValue(S, V)(ref S serializer, const V value)
+	if (is(V == bool) && !is(V == enum))
 {
 	serializer.putValue(value);
 }
 
 /// Char serialization
-void serializeValue(S)(ref S serializer, char value)
+void serializeValue(S, V : char)(ref S serializer, const V value)
+	if (is(V == char) && !is(V == enum))
 {
-	serializer.putValue([value]);
+	auto v = cast(char[1])value;
+	serializer.putValue(v[]);
 }
 
 ///
@@ -2034,7 +2037,7 @@ unittest
 
 /// Deserialize single char
 void deserializeValue(V)(Asdf data, ref V value)
-	if (is(V == char))
+	if (is(V == char) && !is(V == enum))
 {
 	deserializeValue(data, *(()@trusted=> cast(char[1]*)&value)());
 }
@@ -2614,7 +2617,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 		catch (AsdfException e)
 		{
-			throw new DeserializationException(Asdf.Kind.object, "Failed to deserialise member" ~ member, e);
+			throw new DeserializationException(Asdf.Kind.object, "Failed to deserialize member" ~ member, e);
 		}
 
 		foreach(member; __traits(allMembers, RequiredFlags))
@@ -2638,7 +2641,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 	}
 	catch (AsdfException e)
 	{
-		throw new DeserializationException(Asdf.Kind.object, "Failed to deserialise type " ~ V.stringof, e);
+		throw new DeserializationException(Asdf.Kind.object, "Failed to deserialize type " ~ V.stringof, e);
 	}
 }
 
