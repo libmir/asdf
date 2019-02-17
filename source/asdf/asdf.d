@@ -661,7 +661,7 @@ struct Asdf
 				else goto default;
 			case number:
 			{
-				scope str = cast(const(char)[]) data[2 .. $];
+				auto str = cast(const(char)[]) data[2 .. $];
 				static if(is(T == bool))
 					return assumePure(() => str.to!double)() != 0;
 				else
@@ -681,7 +681,7 @@ struct Asdf
 			}
 			case string:
 			{
-				scope str = cast(const(char)[]) data[5 .. $];
+				auto str = cast(const(char)[]) data[5 .. $];
 				static if(is(T == bool))
 					return str != "0" && str != "false" && str != "";
 				else
