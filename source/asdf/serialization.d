@@ -2410,6 +2410,14 @@ void deserializeValue(V)(Asdf data, ref V value)
 		auto kind = data.kind;
 		if(kind != Asdf.Kind.object)
 		{
+			static if(__traits(compiles, value = null))
+			{
+				if (kind == Asdf.Kind.null_)
+				{
+					value = null;
+					return;
+				}
+			}
 			throw new DeserializationException(kind);
 		}
 
@@ -2423,7 +2431,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 				}
 				else
 				{
-					throw new DeserializationException(data.kind, "Object / interface must not be null");
+					throw new DeserializationException(data.kind, "Object / interface must be either not null or have a a default constructor.");
 				}
 			}
 		}
@@ -2656,6 +2664,25 @@ void deserializeValue(V)(Asdf data, ref V value)
 	{
 		throw new DeserializationException(Asdf.Kind.object, "Failed to deserialize type " ~ V.stringof, e);
 	}
+}
+
+///
+unittest
+{
+	static class Turtle
+	{
+		string _metadata;
+		long id;
+		string species;
+	}
+
+	auto turtles = `
+	   [{"_metadata":"xyz123", "id":72, "species":"Galapagos"},
+		{"_metadata":"tu144", "id":108, "species":"Snapping"},
+		null,
+		null,
+		{"_metadata":"anew1", "id":9314, "species":"Sea Turtle"}]`
+	  	.deserialize!(Turtle[]);
 }
 
 private enum bool isSerializedAs(A) = is(A : serializedAs!T, T);
