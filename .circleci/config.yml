@@ -1,48 +1,57 @@
 version: 2.1
+orbs:
+  aws-s3: circleci/aws-s3@1.0.7
 jobs:
   build:
-
     docker:
-      - image: ubuntu:18.04
+      - image: circleci/python:2.7
+      - image: circleci/buildpack-deps:bionic
     environment:
       DMD: 2.085.1
       DUB: 1.11.0
     steps:
       - run:
-          name: Make DMD executables available globally
-          command: |
-            echo 'export PATH=$HOME/dmd2/linux/bin64:$PATH' >> $BASH_ENV
-            echo 'export LD_LIBRARY_PATH=$HOME/dmd2/linux/lib64:$PATH' >> $BASH_ENV
-
-      - run:
           name: Install dependencies
           working_directory: /
           command: |
-            echo $PATH
-            apt -y -qq update
-            apt -y -qq install python3-dev python3-pip curl git
-            curl -O https://bootstrap.pypa.io/get-pip.py
-            pip3 install awscli --upgrade --user
-
-      - checkout
-
-      - run: |
-          git submodule sync .
-          git submodule update --recursive --init
-
-      - run: |
-          curl -fsSL --retry 3 "http://downloads.dlang.org/releases/2.x/$DMD/dmd.$DMD.linux.tar.xz" | tar -C ~ -Jxf -
-          curl -fsSL --retry 3 http://code.dlang.org/files/dub-${DUB}-linux-x86_64.tar.gz | tar -C ~/dmd2/linux/bin64 -zxf -
-          dmd --version
-          dub --version
-
-      - run: dub test
-      
-      - run: make -f doc/Makefile html
-      
-      - deploy:
+            sudo apt -y -qq update
+            sudo apt -y -qq install gcc make
+            curl -fsSL --retry 3 "http://downloads.dlang.org/releases/2.x/$DMD/dmd.$DMD.linux.tar.xz" | tar -C ~ -Jxf -
+            curl -fsSL --retry 3 http://code.dlang.org/files/dub-${DUB}-linux-x86_64.tar.gz | tar -C ~/dmd2/linux/bin64 -zxf -
+            echo 'export PATH=$HOME/dmd2/linux/bin64:$PATH' >> $BASH_ENV
+            echo 'export LD_LIBRARY_PATH=$HOME/dmd2/linux/lib64:$PATH' >> $BASH_ENV
+      - run:
+          name: Test executables
           command: |
-            if [ "${CIRCLE_BRANCH}" == "master" ]; then
-              echo "Uploading docs..."
-              AWS_DEFAULT_REGION=eu-central-1 aws s3 sync --acl public-read --delete web s3://docs.asdf.dlang.io/
-            fi
+            dmd --version
+            dub --version
+      - checkout
+      - run: git submodule sync && git submodule update --recursive --init
+      - run: dub test
+      - run: make -f doc/Makefile html
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - web
+  deploy:
+    docker:
+      - image: circleci/python:2.7
+      - image: circleci/buildpack-deps:bionic
+    steps:
+      - attach_workspace:
+          at: ~/project
+      - aws-s3/sync:
+          from: web
+          to: 's3://asdf.libmir.org'
+          overwrite: true
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
