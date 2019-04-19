@@ -1,83 +1,18 @@
 version: 2.1
 
 orbs:
-  mirci:
-    orbs:
-      aws-s3: circleci/aws-s3@1.0.7
-    commands:
-      persist_docs:
-        parameters:
-            from:
-              description: "Folder with generated docs"
-              type: string
-        steps:
-          - persist_to_workspace:
-              root: ~/project
-              paths:
-                - <<parameters.from>>
-
-      upload_docs_cmd:
-        parameters:
-          to:
-            description: "S3 domain"
-            type: string
-          from:
-            description: "Folder with generated docs"
-            type: string
-        steps:
-          - attach_workspace:
-              at: ~/project
-          - aws-s3/sync:
-              from: '<<parameters.from>>'
-              to: 's3://<<parameters.to>>'
-              overwrite: true
-    jobs:
-      upload_docs_job:
-        docker:
-          - image: circleci/python:latest
-        parameters:
-          to:
-            description: "S3 domain"
-            type: string
-          from:
-            description: "Folder with generated docs"
-            type: string
-        steps:
-          - upload_docs_cmd:
-              to: '<<parameters.to>>'
-              from: '<<parameters.from>>'
+  mirci: libmir/upload_docs@0.0.0
 
 jobs:
   build:
     docker:
-      - image: circleci/python:latest
-      - image: circleci/buildpack-deps:latest
-    environment:
-      DMD: 2.085.1
-      DUB: 1.11.0
+      - image: libmir/circle-dlang
     steps:
-      - run:
-          name: Install dependencies
-          working_directory: /
-          command: |
-            sudo apt -y -qq update
-            sudo apt -y -qq install gcc make ninja-build
-            sudo pip install meson
-            curl -fsSL --retry 3 "http://downloads.dlang.org/releases/2.x/$DMD/dmd.$DMD.linux.tar.xz" | tar -C ~ -Jxf -
-            curl -fsSL --retry 3 http://code.dlang.org/files/dub-${DUB}-linux-x86_64.tar.gz | tar -C ~/dmd2/linux/bin64 -zxf -
-            echo 'export PATH=$HOME/dmd2/linux/bin64:$PATH' >> $BASH_ENV
-            echo 'export LD_LIBRARY_PATH=$HOME/dmd2/linux/lib64:$PATH' >> $BASH_ENV
-      - run:
-          name: Test executables
-          command: |
-            dmd --version
-            dub --version
       - checkout
       - run: git submodule sync && git submodule update --recursive --init
       - run: dub test
-      - run: |
-          meson build
-          ninja -C build test
+      - run: meson build
+      - run: ninja -C build test
       - run: make -f doc/Makefile html
       - mirci/persist_docs:
           from: web
