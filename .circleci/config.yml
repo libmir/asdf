@@ -11,7 +11,7 @@ jobs:
       - checkout
       - run: git submodule sync && git submodule update --recursive --init
       - run: dub test
-      - run: meson build
+      - run: meson build -D with_tests=true
       - run: ninja -C build test
       - run: make -f doc/Makefile html
       - mirci/persist_docs:

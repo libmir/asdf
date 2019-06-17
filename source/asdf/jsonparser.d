@@ -34,12 +34,7 @@ version(LDC)
         import core.simd;
         import ldc.simd;
         import ldc.gccbuiltins_x86;
-        pragma(msg, "Info: SSE4.2 instructions are used for ASDF.");
         version = SSE42;
-    }
-    else
-    {
-        pragma(msg, "Info: SSE4.2 instructions are not used for ASDF.");
     }
 }
 else
