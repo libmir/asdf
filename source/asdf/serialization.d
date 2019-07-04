@@ -1991,7 +1991,7 @@ Deserializes string value.
 This function allocates new string.
 +/
 void deserializeValue(V)(Asdf data, ref V value)
-	if(is(V : const(char)[]) && !is(V == enum) && !isNullable!V)
+	if(is(V : const(char)[]) && !isAggregateType!V && !is(V == enum) && !isNullable!V)
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
