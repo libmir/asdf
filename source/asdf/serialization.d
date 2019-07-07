@@ -29,7 +29,7 @@ pure unittest
 			_foo = 4;
 		}
 
-		double foo() @property
+		double foo() const @property
 		{
 			return _foo + 10;
 		}
@@ -78,6 +78,7 @@ pure unittest
 		[E.a : "A"],
 		"escaped chars = '\\', '\"', '\t', '\r', '\n'");
 	assert(serializeToJson(value) == json);
+	assert(serializeToJson(cast(const)value) == json); // check serialization of const data
 	assert(serializeToAsdf(value).to!string == json);
 	assert(deserialize!S(json).serializeToJson == json);
 }
@@ -1620,7 +1621,7 @@ unittest
 }
 
 /// Enumeration-value associative array serialization
-void serializeValue(S, T, K)(ref S serializer, auto ref T[K] value)
+void serializeValue(S, V : const T[K], T, K)(ref S serializer, V value)
 	if(is(K == enum))
 {
 	if(value is null)
@@ -1649,7 +1650,7 @@ unittest
 }
 
 /// integral typed value associative array serialization
-void serializeValue(S, T, K)(ref S serializer, auto ref T[K] value)
+void serializeValue(S,  V : const T[K], T, K)(ref S serializer, V value)
 	if((isIntegral!K) && !is(K == enum))
 {
 	if(value is null)
@@ -2998,12 +2999,13 @@ private enum isPublic(alias aggregate, string member) = !__traits(getProtection,
 private template isProperty(alias aggregate, string member)
 {
 	static if(isSomeFunction!(__traits(getMember, aggregate, member)))
-		enum isProperty = (functionAttributes!(__traits(getMember, aggregate, member)) & FunctionAttribute.property);
+		enum bool isProperty = (functionAttributes!(__traits(getMember, aggregate, member)) & FunctionAttribute.property) != 0;
 	else
-		enum isProperty = false;
+		enum bool isProperty = false;
 }
 // check if the member is readable
-private enum isReadable(alias aggregate, string member) = __traits(compiles, { auto _val = __traits(getMember, aggregate, member); });
+private enum bool isReadable(alias aggregate, string member) =
+    __traits(compiles, { static fun(T)(auto ref T t) {} fun(__traits(getMember, aggregate, member)); });
 
 // This trait defines what members should be serialized -
 // public members that are either readable and writable or getter properties
@@ -3012,13 +3014,7 @@ private template Serializable(alias value, string member)
 	static if (!isPublic!(value, member))
 		enum Serializable = false;
 	else
-	static if (isReadableAndWritable!(value, member))
-		enum Serializable = true;
-	else
-	static if (isReadable!(value, member))
-		enum Serializable = isProperty!(value, member); // a readable property is getter
-	else
-		enum Serializable = false;
+		enum Serializable = isReadable!(value, member); // any readable is good
 }
 
 /// returns alias sequence, members of which are members of value
@@ -3026,7 +3022,7 @@ private template Serializable(alias value, string member)
 private template SerializableMembers(alias value)
 {
 	import std.meta : ApplyLeft, Filter;
-	alias AllMembers = AliasSeq!(__traits(allMembers, typeof(value)));
+	alias AllMembers = FieldsAndProperties!value;
 	alias isProper = ApplyLeft!(Serializable, value);
 	alias SerializableMembers = Filter!(isProper, AllMembers);
 }
@@ -3051,7 +3047,14 @@ private template Deserializable(alias value, string member)
 private template DeserializableMembers(alias value)
 {
 	import std.meta : ApplyLeft, Filter;
-	alias AllMembers = AliasSeq!(__traits(allMembers, typeof(value)));
+	alias AllMembers = FieldsAndProperties!value;
 	alias isProper = ApplyLeft!(Deserializable, value);
 	alias DeserializableMembers = Filter!(isProper, AllMembers);
+}
+
+private template FieldsAndProperties(alias value)
+{
+	alias AllMembers = AliasSeq!(__traits(allMembers, typeof(value)));
+	alias isProperty = ApplyLeft!(.isProperty, value);
+    alias FieldsAndProperties = AliasSeq!(FieldNameTuple!(typeof(value)), Filter!(isProperty, AllMembers));
 }
