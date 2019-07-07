@@ -228,6 +228,7 @@ unittest
 	}
 
 	static assert(isNullable!(Nullable!(int)));
+	static assert(isNullable!(Nullable!(bool)));
 
 	Bar bar;
 	bar.field = "it's a bar";
@@ -1838,7 +1839,7 @@ unittest
 
 
 /// Deserialize `null` value
-void deserializeValue(Asdf data, typeof(null))
+void deserializeValue(T : typeof(null))(Asdf data, T)
 {
 	auto kind = data.kind;
 	if(kind != Asdf.Kind.null_)
@@ -1852,7 +1853,7 @@ unittest
 }
 
 /// Deserialize boolean value
-void deserializeValue(Asdf data, ref bool value) pure @safe
+void deserializeValue(T : bool)(Asdf data, ref T value) pure @safe
 {
 	auto kind = data.kind;
 	with(Asdf.Kind) switch(kind)
@@ -2415,13 +2416,15 @@ unittest
 	{
 		string str;
 		Nullable!Nested nested;
+		Nullable!bool nval;
 	}
 
 	T t;
 	assert(deserialize!T(`{"str":null,"nested":null}`) == t);
 	t.str = "txt";
 	t.nested = Nested(123);
-	assert(deserialize!T(`{"str":"txt","nested":{"f":123}}`) == t);
+	t.nval = false;
+	assert(deserialize!T(`{"str":"txt","nested":{"f":123},"nval":false}`) == t);
 }
 
 private static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
