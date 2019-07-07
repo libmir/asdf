@@ -1874,7 +1874,33 @@ pure unittest
 	assert(deserialize!bool(serializeToJson(true)));
 }
 
-/// Deserialize numeric value
+/++
+Deserialize numeric value.
+
+Special_deserialisation_string_values:
+
+$(TABLE
+    $(TR $(TD `"+NAN"`))
+    $(TR $(TD `"+NaN"`))
+    $(TR $(TD `"+nan"`))
+    $(TR $(TD `"-NAN"`))
+    $(TR $(TD `"-NaN"`))
+    $(TR $(TD `"-nan"`))
+    $(TR $(TD `"NAN"`))
+    $(TR $(TD `"NaN"`))
+    $(TR $(TD `"nan"`))
+    $(TR $(TD `"+INF"`))
+    $(TR $(TD `"+Inf"`))
+    $(TR $(TD `"+inf"`))
+    $(TR $(TD `"-INF"`))
+    $(TR $(TD `"-Inf"`))
+    $(TR $(TD `"-inf"`))
+    $(TR $(TD `"INF"`))
+    $(TR $(TD `"Inf"`))
+    $(TR $(TD `"inf"`))
+)
+
++/
 void deserializeValue(V)(Asdf data, ref V value)
 	if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
 {
@@ -1889,16 +1915,31 @@ void deserializeValue(V)(Asdf data, ref V value)
 		}
 		if (kind == Asdf.Kind.string)
 		{
-			string v;
-			.deserializeValue(data, v);
+			const(char)[] v;
+			.deserializeScopedString(data, v);
 			switch (v)
 			{
+				case "+NAN":
+				case "+NaN":
+				case "+nan":
+				case "-NAN":
+				case "-NaN":
+				case "-nan":
+				case "NAN":
+				case "NaN":
 				case "nan":
 					value = V.nan;
 					return;
+				case "+INF":
+				case "+Inf":
+				case "+inf":
+				case "INF":
+				case "Inf":
 				case "inf":
 					value = V.infinity;
 					return;
+				case "-INF":
+				case "-Inf":
 				case "-inf":
 					value = -V.infinity;
 					return;
@@ -1930,8 +1971,8 @@ unittest
 	assert(deserialize!double(serializeToAsdf("-2.40")) == double(-2.40));
 
 	import std.math : isNaN, isInfinity;
-	assert(deserialize!float (serializeToJson  ("nan")).isNaN);
-	assert(deserialize!float (serializeToJson  ("inf")).isInfinity);
+	assert(deserialize!float (serializeToJson  ("+NaN")).isNaN);
+	assert(deserialize!float (serializeToJson  ("INF")).isInfinity);
 	assert(deserialize!float (serializeToJson ("-inf")).isInfinity);
 }
 
