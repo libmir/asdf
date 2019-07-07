@@ -1507,6 +1507,7 @@ void serializeValue(S, V)(ref S serializer, in V value)
 	else
 		serializer.putValue(value.to!string);
 }
+
 ///
 unittest
 {
@@ -1820,6 +1821,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 	}
 }
 
+///
 unittest
 {
 	struct S
@@ -1996,8 +1998,25 @@ void deserializeValue(V)(Asdf data, ref V value)
 	else
 	{
 		string s;
-		data.deserializeValue(s);
-		value = s.to!V;
+    	data.deserializeValue(s);
+        SW: switch (s)
+        {
+            static foreach (member; EnumMembers!V)
+            {
+                static if (is(V : const(char)[]))
+                {
+                    static if (to!string(member) != member)
+                    {
+                        case member:
+                    }
+                }
+                case to!string(member): // Generate a case for each enum value.
+                    // Call fooObj.{name of enum value}().
+                    value = member;
+                    break SW;
+            }
+            default: throw new Exception("Unable to deserialize string '" ~ s ~ "' to " ~ V.stringof);
+        }
 	}
 }
 
@@ -2050,21 +2069,26 @@ void deserializeValue(V)(Asdf data, ref V value)
 	}
 }
 
-/// issue #94/#95
+// issue #94/#95/#97
+/// String enums supports both enum keys and enum values.
 unittest
 {
 	enum SimpleEnum : string
 	{
 		se1 = "se1value",
-		se2 = "se1value"
+		se2 = "se2value",
+		se3 = "se3value",
 	}
 
 	struct Simple
 	{
 		SimpleEnum en;
+		SimpleEnum ex;
 	}
 
-	Simple simple = `{"en":"se1"}`.deserialize!(Simple);
+	Simple simple = `{"en":"se2", "ex":"se3value"}`.deserialize!Simple;
+    assert(simple.en == SimpleEnum.se2);
+    assert(simple.ex == SimpleEnum.se3);
 }
 
 /// issue #115
