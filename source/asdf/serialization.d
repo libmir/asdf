@@ -60,6 +60,9 @@ pure unittest
 
 	static struct S
 	{
+        static int staticNotSeialised = 5;
+        enum int enumsNotSeialised = 3;
+
 		@serializedAs!DateTimeProxy
 		DateTime time;
 
@@ -3025,10 +3028,15 @@ private enum isPublic(alias aggregate, string member) = !__traits(getProtection,
 // check if the member is property
 private template isProperty(alias aggregate, string member)
 {
-	static if(isSomeFunction!(__traits(getMember, aggregate, member)))
-		enum bool isProperty = (functionAttributes!(__traits(getMember, aggregate, member)) & FunctionAttribute.property) != 0;
-	else
-		enum bool isProperty = false;
+    static if (__traits(compiles, isSomeFunction!(__traits(getMember, aggregate, member))))
+    {
+        static if (isSomeFunction!(__traits(getMember, aggregate, member)))
+            enum bool isProperty = (functionAttributes!(__traits(getMember, aggregate, member)) & FunctionAttribute.property) != 0;
+        else
+            enum bool isProperty = false;
+    }
+    else
+        enum bool isProperty = false;
 }
 // check if the member is readable
 private enum bool isReadable(alias aggregate, string member) =
