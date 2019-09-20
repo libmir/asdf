@@ -12,6 +12,7 @@ module asdf.transform;
 
 import asdf.asdf;
 import asdf.serialization;
+import std.exception: enforce;
 
 /++
 Object-tree structure for mutable Asdf representation.
@@ -56,7 +57,7 @@ pure:
 		else
 		{
 			this.data = data;
-			assert(isLeaf);
+			enforce(isLeaf);
 		}
 	}
 
@@ -69,7 +70,7 @@ pure:
 		for(;;)
 		{
 			auto ptr = keys[0] in ret.children;
-			assert(ptr, "AsdfNode.opIndex: keys do not exist");
+			enforce(ptr, "AsdfNode.opIndex: keys do not exist");
 			keys = keys[1 .. $];
 			if(keys.length == 0)
 				return *ptr;
@@ -96,7 +97,7 @@ pure:
 			auto ptr = key in root.children;
 			if(ptr)
 			{
-				assert(ptr, "AsdfNode.opIndex: keys do not exist");
+				enforce(ptr, "AsdfNode.opIndex: keys do not exist");
 				keys = keys[1 .. $];
 				root = ptr;
 			}
@@ -156,7 +157,6 @@ pure:
 	{
 		if(isLeaf)
 		{
-			assert(isLeaf, "AsdfNode.serialize: Asdf leaf is empty");
 			serializer.app.put(cast(const(char)[])data.data);
 			return;
 		}
@@ -253,7 +253,6 @@ pure:
 	/// Removes keys from the object-tree recursively.
 	void remove(Asdf data)
 	{
-		import std.exception: enforce;
 		enforce(children, "AsdfNode.remove: asdf data must be a sub-tree");
 		foreach(kv; data.byKeyValue)
 		{
