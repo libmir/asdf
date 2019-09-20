@@ -546,7 +546,7 @@ struct Asdf
 	}
 
 	/// ditto
-	void length4(size_t len) const @property pure nothrow @nogc @trusted
+	private void length4(size_t len) const @property pure nothrow @nogc @trusted
 	{
 		assert(data.length >= 5);
 		assert(len <= uint.max);
