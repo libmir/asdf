@@ -958,14 +958,11 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                         goto next;
                     }
             }
-
-            default :
-                import std.conv;
-                assert(0, strPtr[0].to!string);
+            default: goto value_unexpectedStart;
         }
 
     string:
-        assert(*strPtr == '"');
+        debug assert(*strPtr == '"', "Internal ASDF logic error. Please report an issue.");
         strPtr += 1;
 
     StringLoop: {
@@ -1136,6 +1133,9 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         stackValue = stack.top;
         _lastError = (stackValue & 1) ? "expected ',' or `}` when parsing object" : "expected ',' or `]` when parsing array";
         goto unexpectedValue;
+    value_unexpectedStart:
+        _lastError = "unexpected character when start parsing JSON value";
+        goto unexpectedEnd;
     value_unexpectedEnd:
         _lastError = "unexpected end when start parsing JSON value";
         goto unexpectedEnd;
