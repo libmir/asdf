@@ -216,7 +216,6 @@ unittest
 	assert (deserialize!Foo(`{"my_nullable":200,"field":"it's a foo"}`) == Foo(MyNullable(200), "it's a foo"));
 
 	import std.typecons : Nullable;
-	import std.stdio;
 
 	static struct Bar
 	{
@@ -780,6 +779,68 @@ unittest
 	}
 	assert(`{"s":"d"}`.deserialize!S.s == null);
 	assert(S("d").serializeToJson == `{}`);
+}
+
+/++
+Attribute to ignore a field when equals to its default value.
+Do not use it on void initialized fields or aggregates with void initialized fields, recursively.
++/
+enum Serialization serializationIgnoreDefault = serialization("ignore-default");
+
+///
+unittest
+{
+	static struct Decor
+	{
+		int candles; // 0
+		float fluff = float.infinity; // inf 
+	}
+	
+	static struct Cake
+	{
+		@serializationIgnoreDefault
+		string name = "Chocolate Cake";
+		int slices = 8;
+		float flavor = 1;
+		@serializationIgnoreDefault
+		Decor dec = Decor(20); // { 20, inf }
+	}
+	
+	assert(Cake("Normal Cake").serializeToJson == `{"name":"Normal Cake","slices":8,"flavor":1}`);
+	auto cake = Cake.init;
+	cake.dec = Decor.init;
+	assert(cake.serializeToJson == `{"slices":8,"flavor":1,"dec":{"candles":0,"fluff":"inf"}}`);
+	assert(cake.dec.serializeToJson == `{"candles":0,"fluff":"inf"}`);
+	
+	static struct A
+	{
+		@serializationIgnoreDefault
+		string str = "Banana";
+		int i = 1;
+	}
+	assert(A.init.serializeToJson == `{"i":1}`);
+	
+	static struct S
+	{
+		@serializationIgnoreDefault
+		A a;
+	}
+	assert(S.init.serializeToJson == `{}`);
+	assert(S(A("Berry")).serializeToJson == `{"a":{"str":"Berry","i":1}}`);
+	
+	static struct D
+	{
+		S s;
+	}
+	assert(D.init.serializeToJson == `{"s":{}}`);
+	assert(D(S(A("Berry"))).serializeToJson == `{"s":{"a":{"str":"Berry","i":1}}}`);
+	assert(D(S(A(null, 0))).serializeToJson == `{"s":{"a":{"str":null,"i":0}}}`);
+	
+	static struct F
+	{
+		D d;
+	}
+	assert(F.init.serializeToJson == `{"d":{"s":{}}}`);
 }
 
 /++
@@ -1777,9 +1838,16 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 		auto state = serializer.objectBegin();
 		foreach(member; SerializableMembers!value)
 		{
-			enum udas = [getUDAs!(__traits(getMember, value, member), Serialization)];
-			static if(!ignoreOut(udas))
+			enum memberUdas = [getUDAs!(__traits(getMember, value, member), Serialization)];
+			
+			static if(!ignoreOut(memberUdas))
 			{
+				static if (hasIgnoreDefault(memberUdas))
+				{
+					if (__traits(getMember, value, member) == __traits(getMember, V.init, member))
+						continue;
+				}
+				
 				static if(hasIgnoreOutIf!(__traits(getMember, value, member)))
 				{
 					alias c = unaryFun!(getIgnoreOutIf!(__traits(getMember, value, member)));
@@ -1798,10 +1866,10 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 					auto val = __traits(getMember, value, member);
 				}
 
-				enum key = keyOut(S.stringof, member, udas);
+				enum key = keyOut(S.stringof, member, memberUdas);
 				serializer.putEscapedKey(key);
 
-				static if(isLikeArray(V.stringof, member, udas))
+				static if(isLikeArray(V.stringof, member, memberUdas))
 				{
 					alias V = typeof(val);
 					static if(is(V == interface) || is(V == class) || is(V : E[], E))
@@ -1821,7 +1889,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 					serializer.arrayEnd(valState);
 				}
 				else
-				static if(isLikeObject(V.stringof, member, udas))
+				static if(isLikeObject(V.stringof, member, memberUdas))
 				{
 					static if(is(V == interface) || is(V == class) || is(V : E[T], E, T))
 					{
@@ -3040,6 +3108,15 @@ private bool ignoreIn()(Serialization[] attrs)
 			a.args == ["ignore-in"]
 			);
 }
+
+private bool hasIgnoreDefault()(Serialization[] attrs)
+{
+	import std.algorithm.searching: canFind;
+	return attrs.canFind!(a =>
+			a.args == ["ignore-default"]
+			);
+}
+
 
 private bool hasRequired()(Serialization[] attrs)
 {
