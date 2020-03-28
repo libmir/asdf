@@ -1401,7 +1401,7 @@ unittest
     import std.format: singleSpec;
 
     auto app = appender!string;
-    auto ser = jsonSerializer!"\t"(&app.put!(const(char)[]));
+    auto ser = jsonSerializer!"    "(&app.put!(const(char)[]));
     auto state0 = ser.objectBegin;
 
         ser.putEscapedKey("null");
