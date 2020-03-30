@@ -78,3 +78,21 @@ asdf_dep = this_dep
 asdf_lib = this_lib
 
 test_subdirs = []
+
+if get_option('with_test_explicit')
+
+    test_exe = executable(meson.project_name() + '-tset',
+        sources,
+        include_directories: directories,
+        d_unittest: true,
+        d_module_versions: test_versions,
+        link_args: '-main',
+        dependencies: required_deps,
+    )
+
+    test(meson.project_name() + '-test', test_exe)
+
+    foreach dir : test_subdirs
+        subdir(dir)
+    endforeach
+endif
