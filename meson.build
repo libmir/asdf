@@ -69,10 +69,10 @@ install_subdir('source/',
     install_dir: 'include/d/' + meson.project_name(),
 )
 
-import('pkgconfig').generate(this_lib,
-    description: description,
-    subdirs: 'd/' + meson.project_name(),
-)
+# import('pkgconfig').generate(this_lib,
+#     description: description,
+#     subdirs: 'd/' + meson.project_name(),
+# )
 
 asdf_dep = this_dep
 asdf_lib = this_lib
