@@ -2,7 +2,7 @@ project('asdf', 'd', version : '0.5.5', license: 'BSL-1.0')
 
 description = 'Mir ASDF - JSON Parsing and Serialization'
 
-subprojects = []
+subprojects = ['mir-core', 'mir-algorithm']
 
 has_cpp_headers = false
 

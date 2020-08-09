@@ -50,3 +50,4 @@ benchmarks/sajson/sajson-benchmark
 build/
 test.d
 test
+subprojects/*/
