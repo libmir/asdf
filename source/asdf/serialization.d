@@ -911,6 +911,7 @@ unittest
     import asdf;
     import std.range;
     import std.algorithm;
+    import std.conv;
 
     static struct S
     {
