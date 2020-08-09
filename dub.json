@@ -4,6 +4,9 @@
 	"license": "BSL-1.0",
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
+    "dependencies": {
+        "mir-algorithm": ">=3.9.17 <4.0.0"
+    },
 	"buildTypes": {
 		"unittest-sse42": {
 			"buildOptions": ["unittests", "debugMode", "debugInfo"],

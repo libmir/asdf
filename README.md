@@ -113,20 +113,20 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 
 | uda | function |
 | ------------- |:-------------:|
-| `@serializationKeys("bar_common", "bar")` | tries to read the data from either property. saves it to the first one |
-| `@serializationKeysIn("a", "b")` | tries to read the data from `a`, then `b`. last one occuring in the json wins |
-| `@serializationKeyOut("a")` | writes it to `a` |
+| `@serdeKeys("bar_common", "bar")` | tries to read the data from either property. saves it to the first one |
+| `@serdeKeysIn("a", "b")` | tries to read the data from `a`, then `b`. last one occuring in the json wins |
+| `@serdeKeyOut("a")` | writes it to `a` |
 | `@serializationMultiKeysIn(["a", "b", "c"])`  | tries to get the data from a sub object. this has not optimal performance yet if you are using more than 1 serializationMultiKeysIn in an object |
-| `@serializationIgnore` | ignore this property completely |
-| `@serializationIgnoreIn` | don't read this property |
-| `@serializationIgnoreOut` | don't write this property |
-| `@serializationIgnoreOutIf!condition` | run function `condition` on serialization and don't write this property if the result is true |
-| `@serializationScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
-| `@serializedAs!string` | call to!string |
-| `@serializationTransformIn!fin` | call function `fin` to transform the data |
-| `@serializationTransformOut!fout`  | run function `fout` on serialization, different notation |
-| `@serializationFlexible`  | be flexible on the datatype on reading, e.g. read longs that are wrapped as strings |
-| `@serializationRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
+| `@serdeIgnore` | ignore this property completely |
+| `@serdeIgnoreIn` | don't read this property |
+| `@serdeIgnoreOut` | don't write this property |
+| `@serdeIgnoreOutIf!condition` | run function `condition` on serialization and don't write this property if the result is true |
+| `@serdeScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
+| `@serdeProxy!string` | call to!string |
+| `@serdeTransformIn!fin` | call function `fin` to transform the data |
+| `@serdeTransformOut!fout`  | run function `fout` on serialization, different notation |
+| `@serdeFlexible`  | be flexible on the datatype on reading, e.g. read longs that are wrapped as strings |
+| `@serdeRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
 
 
 Please also look into the Docs or Unittest for concrete examples!
@@ -202,16 +202,16 @@ struct S
 struct S
 {
 	// ignored
-	@serializationIgnore int temp;
+	@serdeIgnore int temp;
 	
 	// can be formatted to json
-	@serializationIgnoreIn int a;
+	@serdeIgnoreIn int a;
 	
 	//can be parsed from json
-	@serializationIgnoreOut int b;
+	@serdeIgnoreOut int b;
 	
 	// ignored if negative
-	@serializationIgnoreOutIf!`a < 0` int c;
+	@serdeIgnoreOutIf!`a < 0` int c;
 }
 ```
 
@@ -220,12 +220,12 @@ struct S
 struct S
 {
 	// key is overrided to "aaa"
-	@serializationKeys("aaa") int a;
+	@serdeKeys("aaa") int a;
 
 	// overloads multiple keys for parsing
-	@serializationKeysIn("b", "_b")
+	@serdeKeysIn("b", "_b")
 	// overloads key for generation
-	@serializationKeyOut("_b_")
+	@serdeKeyOut("_b_")
 	int b;
 }
 ```
@@ -255,7 +255,7 @@ struct DateTimeProxy
 //serialize a Doubly Linked list into an Array
 struct SomeDoublyLinkedList
 {
-	@serializationIgnore DList!(SomeArr[]) myDll;
+	@serdeIgnore DList!(SomeArr[]) myDll;
 	alias myDll this;
 
 	//no template but a function this time!
@@ -276,12 +276,12 @@ struct SomeDoublyLinkedList
 ```d
 struct S
 {
-	@serializedAs!DateTimeProxy DateTime time;
+	@serdeProxy!DateTimeProxy DateTime time;
 }
 ```
 
 ```d
-@serializedAs!ProxyE
+@serdeProxy!ProxyE
 enum E
 {
 	none,
@@ -289,7 +289,7 @@ enum E
 }
 
 // const(char)[] doesn't reallocate ASDF data.
-@serializedAs!(const(char)[])
+@serdeProxy!(const(char)[])
 struct ProxyE
 {
 	E e;
@@ -349,7 +349,7 @@ struct S
 	string a;
 	int b;
 
-	@serializationIgnoreIn double sum;
+	@serdeIgnoreIn double sum;
 
 	void finalizeDeserialization(Asdf data)
 	{
@@ -362,11 +362,11 @@ struct S
 assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
 ```
 
-##### serializationFlexible
+##### serdeFlexible
 ```D
 static struct S
 {
-	@serializationFlexible uint a;
+	@serdeFlexible uint a;
 }
 
 assert(`{"a":"100"}`.deserialize!S.a == 100);
