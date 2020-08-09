@@ -11,76 +11,10 @@ Publicly imports `mir.serde` from the `mir-algorithm` package.
 +/
 module asdf.serialization;
 
-public import mir.serde;
-import mir.reflection;
-
-deprecated("use @serdeIgnoreOut instead")
-alias serializationIgnoreOut = serdeIgnoreOut;
-
-deprecated("use @serdeIgnoreIn instead")
-alias serializationIgnoreIn = serdeIgnoreIn;
-
-deprecated("use @serdeIgnore instead")
-alias serializationIgnore = serdeIgnore;
-
-deprecated("use @serdeKeys instead")
-alias serializationKeys = serdeKeys;
-
-deprecated("use @serdeKeys instead")
-alias serializationKeyOut = serdeKeyOut;
-
-deprecated("use @serdeIgnoreDefault instead")
-alias serializationIgnoreDefault = serdeIgnoreDefault;
-
-deprecated("use @serdeFlexible instead")
-alias serializationFlexible = serdeFlexible;
-
-deprecated("use @serdeLikeList instead")
-alias serializationLikeArray = serdeLikeList;
-
-deprecated("use @serdeLikeStruct instead")
-alias serializationLikeObject = serdeLikeStruct;
-
-deprecated("use @serdeProxy instead")
-alias serializedAs = serdeProxy;
-
-deprecated("use @serdeIgnoreOutIf instead")
-alias serializationIgnoreOutIf = serdeIgnoreOutIf;
-
-private template getUDA(alias symbol, alias attribute)
-{
-    private alias all = getUDAs!(symbol, attribute);
-    static if (all.length != 1)
-        static assert(0, "Exactly one " ~ attribute.stringof ~ " attribute is required");
-    else
-        alias getUDA = all[0];
-}
-
-/++
-Can be applied only to strings fields.
-Does not allocate new data when deserializeing. Raw ASDF data is used for strings instead of new memory allocation.
-Use this attributes only for strings that would not be used after ASDF deallocation.
-+/
-enum serdeScoped;
-
-deprecated("use @serdeScoped instead")
-alias serializationScoped = serdeScoped;
-
-/++
-Attribute that force deserializer to throw an exception that the field was not found in the input.
-+/
-enum serdeRequired;
-
-deprecated("use @serdeRequired instead")
-alias serializationRequired = serdeRequired;
-
-/++
-Checks if member is field.
-+/
-enum bool isField(T, string member) = __traits(compiles, (ref T aggregate) { return __traits(getMember, aggregate, member).offsetof; });
-
 import asdf.jsonparser: assumePure;
+import mir.reflection;
 import std.range.primitives: isOutputRange;
+public import mir.serde;
 
 ///
 pure unittest
@@ -971,39 +905,17 @@ unittest
     assert(`{"obj":{"a":1,"b":2,"c":9}}`.deserialize!S.obj.sum == 12);
 }
 
-/++
-Attributes for in and out transformations.
-Return type of in transformation must be implicitly convertable to the type of the field.
-Return type of out transformation may be differ from the type of the field.
-In transformation would be applied after serialization proxy if any.
-Out transformation would be applied before serialization proxy if any.
-+/
-struct serializationTransformIn(alias fun)
-{
-    alias transform = fun;
-}
-
-/// ditto
-struct serializationTransformOut(alias fun)
-{
-    alias transform = fun;
-}
-
 ///
 unittest
 {
     import asdf;
-
-    // global unary function
-    static int fin(int i)
-    {
-        return i + 2;
-    }
+    import std.range;
+    import std.algorithm;
 
     static struct S
     {
-        @serializationTransformIn!fin
-        @serializationTransformOut!`"str".repeat.take(a).joiner("_").to!string`
+        @serdeTransformIn!"a + 2"
+        @serdeTransformOut!(a =>"str".repeat.take(a).joiner("_").to!string)
         int a;
     }
 
@@ -1518,9 +1430,7 @@ void serializeValue(S, V)(ref S serializer, in V value)
 {
     static if (hasUDA!(V, serdeProxy))
     {
-        alias Proxy = TemplateArgsOf!(getUDA!(V, serdeProxy));
-        pragma(msg, Proxy);
-        serializer.serializeValue(value.to!Proxy);
+        serializer.serializeValue(value.to!(serdeGetProxy!V));
     }
     else
         serializer.putValue(value.to!string);
@@ -1751,8 +1661,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 
     static if (hasUDA!(V, serdeProxy))
     {{
-        alias Proxy = TemplateArgsOf!(getUDA!(V, serdeProxy));
-        serializer.serializeValue(value.to!Proxy);
+        serializer.serializeValue(value.to!(serdeGetProxy!V));
         return;
     }}
     else
@@ -1766,7 +1675,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         foreach(member; aliasSeqOf!(SerializableMembers!V))
         {{
             enum key = serdeGetKeyOut!(__traits(getMember, value, member));
-            
+
             static if (key !is null)
             {
                 static if (hasUDA!(__traits(getMember, value, member), serdeIgnoreDefault))
@@ -1777,15 +1686,13 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                 
                 static if(hasUDA!(__traits(getMember, value, member), serdeIgnoreOutIf))
                 {
-                    alias pred = unaryFun!(TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeIgnoreOutIf)));
+                    alias pred = serdeGetIgnoreOutIf!(__traits(getMember, value, member));
                     if (pred(__traits(getMember, value, member)))
-                    {
                         continue;
-                    }
                 }
-                static if(hasTransformOut!(__traits(getMember, value, member)))
+                static if(hasUDA!(__traits(getMember, value, member), serdeTransformOut))
                 {
-                    alias f = unaryFun!(getTransformOut!(__traits(getMember, value, member)));
+                    alias f = serdeGetTransformOut!(__traits(getMember, value, member));
                     auto val = f(__traits(getMember, value, member));
                 }
                 else
@@ -1836,8 +1743,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                 else
                 static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
                 {
-                    alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
-                    serializer.serializeValue(val.to!Proxy);
+                    serializer.serializeValue(val.to!(serdeGetProxy!(__traits(getMember, value, member))));
                 }
                 else
                 {
@@ -2040,8 +1946,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 {
     static if (hasUDA!(V, serdeProxy))
     {
-        alias Proxy = TemplateArgsOf!(getUDA!(V, serdeProxy));
-        Proxy proxy;
+        serdeGetProxy!V proxy;
         enum F = hasUDA!(value, serdeFlexible);
         enum S = hasUDA!(value, serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
         alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2513,8 +2418,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 {
     static if (hasUDA!(V, serdeProxy))
     {{
-        alias Proxy = TemplateArgsOf!(getUDA!(V, serdeProxy));
-        Proxy proxy;
+        serdeGetProxy!V proxy;
         enum F = hasUDA!(value, serdeFlexible);
         enum S = hasUDA!(value, serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
         alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
@@ -2598,8 +2502,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                             static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
                             {
                                 static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
-                                Proxy proxy;
+                                serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
                                 foreach(v; elem.value.byElement)
@@ -2613,8 +2516,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                             static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
                             {
                                 static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
-                                Proxy proxy;
+                                serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
                                 foreach(v; elem.value.byKeyValue)
@@ -2627,8 +2529,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                             else
                             static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
                             {
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
-                                Proxy proxy;
+                                serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
@@ -2654,9 +2555,9 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 __traits(getMember, value, member) = val;
                             }
 
-                            static if(hasTransformIn!(__traits(getMember, value, member)))
+                            static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
                             {
-                                alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
+                                alias f = serdeGetTransformIn!(__traits(getMember, value, member));
                                 __traits(getMember, value, member) = f(__traits(getMember, value, member));
                             }
 
@@ -2694,13 +2595,11 @@ void deserializeValue(V)(Asdf data, ref V value)
                             }
                             static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
                             {
-                                static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
                                 foreach(v; elem.value.byElement)
                                 {
-                                    Proxy proxy;
+                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     Fun(v, proxy);
                                     __traits(getMember, value, member).put(proxy);
                                 }
@@ -2708,13 +2607,11 @@ void deserializeValue(V)(Asdf data, ref V value)
                             else
                             static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
                             {
-                                static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeProxy));
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
                                 foreach(v; elem.value.byKeyValue)
                                 {
-                                    Proxy proxy;
+                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     Fun(v.value, proxy);
                                     __traits(getMember, value, member)[elem.key.idup] = proxy;
                                 }
@@ -2722,11 +2619,10 @@ void deserializeValue(V)(Asdf data, ref V value)
                             else
                             static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
                             {
-                                alias Proxy = TemplateArgsOf!(getUDA!(__traits(getMember, value, member), serdeLikeStruct));
+                                serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                 enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, proxy));
                                 alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
 
-                                Proxy proxy;
                                 Fun(d, proxy);
                                 __traits(getMember, value, member) = proxy.to!Type;
                             }
@@ -2749,9 +2645,9 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 __traits(getMember, value, member) = val;
                             }
 
-                            static if(hasTransformIn!(__traits(getMember, value, member)))
+                            static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
                             {
-                                alias f = unaryFun!(getTransformIn!(__traits(getMember, value, member)));
+                                alias f = serdeGetTransformIn!(__traits(getMember, value, member));
                                 __traits(getMember, value, member) = f(__traits(getMember, value, member));
                             }
                         }
@@ -2826,58 +2722,6 @@ unittest
     assert(`{"a":3, "b":4}`.deserialize!C == C(S(3), 4));
 }
 
-private enum bool isTransformIn(A) = is(A : serializationTransformIn!fun, alias fun);
-private enum bool isTransformIn(alias a) = false;
-
-unittest
-{
-    static assert(isTransformIn!(serializationTransformIn!"a * 2"));
-    static assert(!isTransformIn!(string));
-}
-
-private enum bool isTransformOut(A) = is(A : serializationTransformOut!fun, alias fun);
-private enum bool isTransformOut(alias a) = false;
-
-unittest
-{
-    static assert(isTransformOut!(serializationTransformOut!"a * 2"));
-    static assert(!isTransformIn!(string));
-}
-
-private alias TransformInList(alias value) = staticMap!(getTransformIn, Filter!(isTransformIn, __traits(getAttributes, value)));
-private alias TransformOutList(alias value) = staticMap!(getTransformOut, Filter!(isTransformOut, __traits(getAttributes, value)));
-
-private template hasTransformIn(alias value)
-{
-    private enum _listLength = TransformInList!(value).length;
-    static assert(_listLength <= 1, `Only single input transformation is allowed`);
-    enum bool hasTransformIn = _listLength == 1;
-}
-
-private template hasTransformOut(alias value)
-{
-    private enum _listLength = TransformOutList!(value).length;
-    static assert(_listLength <= 1, `Only single output transformation is allowed`);
-    enum bool hasTransformOut = _listLength == 1;
-}
-
-private alias getTransformIn(T) = T.transform;
-private alias getTransformOut(T) = T.transform;
-
-private template getTransformIn(alias value)
-{
-    private alias _list = TransformInList!value;
-    static assert(_list.length <= 1, `Only single input transformation is allowed`);
-    alias getTransformIn = _list[0];
-}
-
-private template getTransformOut(alias value)
-{
-    private alias _list = TransformOutList!value;
-    static assert(_list.length <= 1, `Only single output transformation is allowed`);
-    alias getTransformOut = _list[0];
-}
-
 unittest
 {
     struct A {
@@ -2912,3 +2756,48 @@ private template isNullable(T)
         enum isNullable = false;
     }
 }
+
+deprecated("use @serdeIgnoreOut instead")
+alias serializationIgnoreOut = serdeIgnoreOut;
+
+deprecated("use @serdeIgnoreIn instead")
+alias serializationIgnoreIn = serdeIgnoreIn;
+
+deprecated("use @serdeIgnore instead")
+alias serializationIgnore = serdeIgnore;
+
+deprecated("use @serdeKeys instead")
+alias serializationKeys = serdeKeys;
+
+deprecated("use @serdeKeys instead")
+alias serializationKeyOut = serdeKeyOut;
+
+deprecated("use @serdeIgnoreDefault instead")
+alias serializationIgnoreDefault = serdeIgnoreDefault;
+
+deprecated("use @serdeFlexible instead")
+alias serializationFlexible = serdeFlexible;
+
+deprecated("use @serdeLikeList instead")
+alias serializationLikeArray = serdeLikeList;
+
+deprecated("use @serdeLikeStruct instead")
+alias serializationLikeObject = serdeLikeStruct;
+
+deprecated("use @serdeProxy instead")
+alias serializedAs = serdeProxy;
+
+deprecated("use @serdeIgnoreOutIf instead")
+alias serializationIgnoreOutIf = serdeIgnoreOutIf;
+
+deprecated("use @serdeTransformIn instead")
+alias serializationTransformIn = serdeTransformIn;
+
+deprecated("use @serdeTransformOut instead")
+alias serializationTransformOut = serdeTransformOut;
+
+deprecated("use @serdeScoped instead")
+alias serializationScoped = serdeScoped;
+
+deprecated("use @serdeRequired instead")
+alias serializationRequired = serdeRequired;

@@ -123,8 +123,8 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 | `@serdeIgnoreOutIf!condition` | run function `condition` on serialization and don't write this property if the result is true |
 | `@serdeScoped` | Dangerous! non allocating strings. this means data can vanish if the underlying buffer is removed.  |
 | `@serdeProxy!string` | call to!string |
-| `@serializationTransformIn!fin` | call function `fin` to transform the data |
-| `@serializationTransformOut!fout`  | run function `fout` on serialization, different notation |
+| `@serdeTransformIn!fin` | call function `fin` to transform the data |
+| `@serdeTransformOut!fout`  | run function `fout` on serialization, different notation |
 | `@serdeFlexible`  | be flexible on the datatype on reading, e.g. read longs that are wrapped as strings |
 | `@serdeRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
 
