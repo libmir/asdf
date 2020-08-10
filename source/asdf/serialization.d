@@ -1434,14 +1434,16 @@ void serializeValue(S, V)(ref S serializer, in V value)
         serializer.serializeValue(value.to!(serdeGetProxy!V));
     }
     else
-        serializer.putValue(value.to!string);
+    {
+        serializer.putValue(serdeGetKeyOut(value));
+    }
 }
 
 ///
 unittest
 {
-    enum Key { foo }
-    assert(serializeToJson(Key.foo) == `"foo"`);
+    enum Key { @serdeKeys("FOO", "foo") foo }
+    assert(serializeToJson(Key.foo) == `"FOO"`);
 }
 
 /// String serialization
@@ -1956,34 +1958,18 @@ void deserializeValue(V)(Asdf data, ref V value)
     }
     else
     {
-        string s;
+        const(char)[] s;
         data.deserializeValue(s);
-        SW: switch (s)
-        {
-            static foreach (member; EnumMembers!V)
-            {
-                static if (is(V : const(char)[]))
-                {
-                    static if (to!string(member) != member)
-                    {
-                        case member:
-                    }
-                }
-                case to!string(member): // Generate a case for each enum value.
-                    // Call fooObj.{name of enum value}().
-                    value = member;
-                    break SW;
-            }
-            default: throw new Exception("Unable to deserialize string '" ~ s ~ "' to " ~ V.stringof);
-        }
+        if (!serdeParseEnum(s, value))
+            throw new Exception("Unable to deserialize string '" ~ s.idup ~ "' to " ~ V.stringof);
     }
 }
 
 ///
 unittest
 {
-    enum Key { foo }
-    assert(deserialize!Key(`"foo"`) == Key.foo);
+    @serdeIgnoreCase enum Key { foo }
+    assert(deserialize!Key(`"FOO"`) == Key.foo);
     assert(deserialize!Key(serializeToAsdf("foo")) == Key.foo);
 }
 
@@ -2029,13 +2015,18 @@ void deserializeValue(V)(Asdf data, ref V value)
 }
 
 // issue #94/#95/#97
-/// String enums supports both enum keys and enum values.
+/// String enums supports only enum keys
 unittest
 {
     enum SimpleEnum : string
     {
+        @serdeKeys("se1", "se1value")
         se1 = "se1value",
+
+        @serdeKeys("se2", "se2value")
         se2 = "se2value",
+
+        @serdeKeys("se3", "se3value")
         se3 = "se3value",
     }
 
