@@ -135,8 +135,13 @@ pure unittest
             auto b = r["g"].get(0.0);
             sum = a + b;
         }
+
+        void serdeFinalize() pure
+        {
+            sum *= 2;
+        }
     }
-    assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
+    assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 26));
 }
 
 /// A user may define setter and/or getter properties.
@@ -2665,6 +2670,11 @@ void deserializeValue(V)(Asdf data, ref V value)
         static if(__traits(hasMember, V, "finalizeDeserialization"))
         {
             value.finalizeDeserialization(data);
+        }
+
+        static if(__traits(hasMember, V, "serdeFinalize"))
+        {
+            value.serdeFinalize();
         }
     }
     catch (DeserializationException e)
