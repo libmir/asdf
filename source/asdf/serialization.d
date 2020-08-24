@@ -2217,7 +2217,7 @@ void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
         case null_:
             return;
         default:
-            throw new DeserializationException(kind, "Failed to deserialize value of " ~ T[N].stringof);
+            throw new DeserializationException(kind, "Failed to deserialize value of " ~ V.stringof);
     }
 }
 
