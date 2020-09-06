@@ -95,7 +95,7 @@ class EmptyAsdfException: AsdfException
 {
     ///
     this(
-        string msg = "ASDF values is empty",
+        string msg = "ASDF value is empty",
         string file = __FILE__,
         size_t line = __LINE__,
         Throwable next = null) pure nothrow @nogc @safe 
