@@ -2735,7 +2735,7 @@ unittest
     @serdeOrderedIn
     static struct S
     {
-        @serdeIgnore double acc = 0;
+        double acc;
 
     @safe pure nothrow @nogc
     @property:
@@ -2751,8 +2751,7 @@ unittest
         }
     }
 
-    import std.conv;
-    assert(deserialize!S(`{"mul":2,"add":5}`).acc == 10, deserialize!S(`{"mul":2,"add":5}`).acc.text);
+    assert(deserialize!S(`{"mul":2,"add":5,"acc":100}`).acc == 210);
 }
 
 ///
