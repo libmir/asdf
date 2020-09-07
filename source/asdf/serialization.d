@@ -2459,15 +2459,16 @@ void deserializeValue(V)(Asdf data, ref V value)
             }
         }
 
+        SerdeFlags!V requiredFlags;
+
         static if (hasUDA!(V, serdeOrderedIn))
         {
-            auto temporal = SerdeOrderedDummy!V(&value);
+            SerdeOrderedDummy!V temporal;
             .deserializeValue(data, temporal);
+            temporal.serdeFinalizeTarget(value, requiredFlags);
         }
         else
         {
-
-            SerdeFlags!V requiredFlags;
             import std.meta: aliasSeqOf;
 
             foreach(elem; data.byKeyValue)
@@ -2732,26 +2733,39 @@ unittest
 /// `serdeOrderedIn` supprot
 unittest
 {
+    static struct I
+    {
+        int a;
+        int m;
+    }
+
     @serdeOrderedIn
     static struct S
     {
-        double acc;
+        int acc;
+
+        I inner = I(1000, 0);
 
     @safe pure nothrow @nogc
     @property:
 
-        void add(double v)
+        void add(int v)
         {
+            inner.a += v;
             acc += v;
         }
 
-        void mul(double v)
+        void mul(int v)
         {
+            inner.m += v;
             acc *= v;
         }
     }
 
-    assert(deserialize!S(`{"mul":2,"add":5,"acc":100}`).acc == 210);
+    auto val = `{"mul":2,"add":5,"acc":100, "inner":{"m": 2000}}`.deserialize!S;
+    assert(val.acc == 210);
+    assert(val.inner.a == 1005);
+    assert(val.inner.m == 2002);
 }
 
 ///
