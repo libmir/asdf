@@ -2742,6 +2742,10 @@ unittest
     @serdeOrderedIn
     static struct S
     {
+        import mir.small_string;
+
+        SmallString!8 id;
+
         int acc;
 
         I inner = I(1000, 0);
@@ -2762,7 +2766,10 @@ unittest
         }
     }
 
-    auto val = `{"mul":2,"add":5,"acc":100, "inner":{"m": 2000}}`.deserialize!S;
+    import mir.reflection;
+
+    auto val = `{"mul":2, "id": "str", "add":5,"acc":100, "inner":{"m": 2000}}`.deserialize!S;
+    assert(val.id == "str");
     assert(val.acc == 210);
     assert(val.inner.a == 1005);
     assert(val.inner.m == 2002);
