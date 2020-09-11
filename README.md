@@ -124,7 +124,8 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 | `@serdeProxy!string` | call to!string |
 | `@serdeTransformIn!fin` | call function `fin` to transform the data |
 | `@serdeTransformOut!fout`  | run function `fout` on serialization, different notation |
-| `@serdeRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
+| `@serdeAllowMultiple`  | Allows deserialiser to serialize multiple keys for the same object member input. |
+| `@serdeOptional`  | Allows deserialiser to to skip member desrization of no keys corresponding keys input. |
 
 
 Please also look into the Docs or Unittest for concrete examples!
