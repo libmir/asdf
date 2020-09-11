@@ -116,7 +116,6 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 | `@serdeKeys("bar_common", "bar")` | tries to read the data from either property. saves it to the first one |
 | `@serdeKeysIn("a", "b")` | tries to read the data from `a`, then `b`. last one occuring in the json wins |
 | `@serdeKeyOut("a")` | writes it to `a` |
-| `@serializationMultiKeysIn(["a", "b", "c"])`  | tries to get the data from a sub object. this has not optimal performance yet if you are using more than 1 serializationMultiKeysIn in an object |
 | `@serdeIgnore` | ignore this property completely |
 | `@serdeIgnoreIn` | don't read this property |
 | `@serdeIgnoreOut` | don't write this property |

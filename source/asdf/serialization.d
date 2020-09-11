@@ -603,13 +603,6 @@ version(unittest) private
     }
 }
 
-/// Additional serialization attribute type
-struct SerializationGroup
-{
-    /// 2D string list
-    string[][] args;
-}
-
 ///
 pure unittest
 {
@@ -644,29 +637,6 @@ pure unittest
     }
     assert(`{"field":"val"}`.deserialize!S.field == "val");
     assertThrown(`{"other":"val"}`.deserialize!S);
-}
-
-/++
-Attribute for key overloading during deserialization.
-
-Attention: `serializationMultiKeysIn` is not optimized yet and may significantly slowdown deserialization.
-+/
-SerializationGroup serializationMultiKeysIn(string[][] keys...) pure @safe
-{
-    return SerializationGroup(keys.dup);
-}
-
-///
-unittest
-{
-    import asdf;
-
-    static struct S
-    {
-        @serializationMultiKeysIn(["a", "b", "c"])
-        string s;
-    }
-    assert(`{"a":{"b":{"c":"d"}}}`.deserialize!S.s == "d");
 }
 
 ///
@@ -2528,95 +2498,6 @@ void deserializeValue(V)(Asdf data, ref V value)
                     }}
                     default:
                 }
-            }
-            static foreach(member; serdeFinalProxyDeserializableMembers!V)
-            try {
-                enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
-                static if(keys.length)
-                {
-                    enum target = [getUDAs!(__traits(getMember, value, member), SerializationGroup)];
-                    static if(target.length)
-                    {
-                        static assert(target.length == 1, member ~ ": only one @serdeKeysIn(string[][]...) is allowed.");
-                        foreach(ser; target[0].args)
-                        {
-                            auto d = data[ser];
-                            if(d.data.length)
-                            {
-                                __traits(getMember, requiredFlags, member) = true;
-                                static if(!__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}))
-                                {
-                                    alias Type = Parameters!(__traits(getMember, value, member));
-                                }
-                                else
-                                {
-                                    alias Type = typeof(__traits(getMember, value, member));
-                                }
-                                static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
-                                {
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-                                    foreach(v; elem.value.byElement)
-                                    {
-                                        serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                        Fun(v, proxy);
-                                        __traits(getMember, value, member).put(proxy);
-                                    }
-                                }
-                                else
-                                static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
-                                {
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-                                    foreach(v; elem.value.byKeyValue)
-                                    {
-                                        serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                        Fun(v.value, proxy);
-                                        __traits(getMember, value, member)[elem.key.idup] = proxy;
-                                    }
-                                }
-                                else
-                                static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
-                                {
-                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(d, proxy);
-                                    __traits(getMember, value, member) = proxy.to!Type;
-                                }
-                                else
-                                static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
-                                {
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(d, __traits(getMember, value, member));
-                                }
-                                else
-                                {
-                                    Type val;
-
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, val));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(elem.value, val);
-                                    __traits(getMember, value, member) = val;
-                                }
-
-                                static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
-                                {
-                                    alias f = serdeGetTransformIn!(__traits(getMember, value, member));
-                                    __traits(getMember, value, member) = f(__traits(getMember, value, member));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (AsdfException e)
-            {
-                throw new DeserializationException(Asdf.Kind.object, "Failed to deserialize member" ~ member, e);
             }
 
             static foreach(member; __traits(allMembers, SerdeFlags!V))
