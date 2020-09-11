@@ -1989,6 +1989,7 @@ unittest
 
     struct Example
     {
+        @serdeOptional
         Nullable!string field1;
     }
 
@@ -2331,6 +2332,7 @@ unittest
     {
         string str;
         Nullable!Nested nested;
+        @serdeOptional
         Nullable!bool nval;
     }
 
@@ -2405,8 +2407,10 @@ void deserializeValue(V)(Asdf data, ref V value)
         {
             import std.meta: aliasSeqOf;
 
+
             foreach(elem; data.byKeyValue)
             {
+                static immutable excm(string member) = new AsdfException("ASDF deserialisation: multiple keys for member '" ~ member ~ "' in " ~ V.stringof ~ " are not allowed.");
                 S: switch(elem.key)
                 {
                     static foreach(member; serdeFinalProxyDeserializableMembers!V)
@@ -2417,8 +2421,12 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 foreach (key; aliasSeqOf!keys)
                                 {
                     case key:
-
                                 }
+
+                                static if (!hasUDA!(__traits(getMember, value, member), serdeAllowMultiple))
+                                    if (__traits(getMember, requiredFlags, member))
+                                        throw excm!member;
+
                                 __traits(getMember, requiredFlags, member) = true;
 
                                 static if(!__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}))
@@ -2499,17 +2507,11 @@ void deserializeValue(V)(Asdf data, ref V value)
                     default:
                 }
             }
-
+            static immutable exc(string member) = new AsdfException("ASDF deserialisation: non-optional member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
             static foreach(member; __traits(allMembers, SerdeFlags!V))
-                static if (hasUDA!(__traits(getMember, value, member), serdeRequired))
-            {
-                if (!__traits(getMember, requiredFlags, member))
-                    throw () {
-                        static immutable exc = new AsdfException(
-                    "ASDF deserialisation: Required member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
-                        return exc;
-                    } ();
-            }
+                static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
+                    if (!__traits(getMember, requiredFlags, member))
+                        throw exc!member;
         }
 
         static if(__traits(hasMember, V, "finalizeDeserialization"))
@@ -2578,6 +2580,7 @@ unittest
 {
     static struct I
     {
+        @serdeOptional
         int a;
         int m;
     }

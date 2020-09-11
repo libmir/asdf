@@ -5,8 +5,8 @@
 	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
     "dependencies": {
-        "mir-algorithm": ">=3.9.38",
-        "mir-core": ">=1.1.11"
+        "mir-algorithm": ">=3.9.32 <4.0.0",
+        "mir-core": ">=1.1.12"
     },
 	"buildTypes": {
 		"unittest-sse42": {

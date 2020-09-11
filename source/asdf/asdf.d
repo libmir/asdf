@@ -79,7 +79,7 @@ class InvalidAsdfException: AsdfException
         size_t line = __LINE__,
         Throwable next = null) pure nothrow @safe 
     {
-        import std.conv: text;
+        import mir.format: text;
         super(text("ASDF values is invalid for kind = ", kind), file, line, next);
     }
 
