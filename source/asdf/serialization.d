@@ -22,7 +22,7 @@ pure unittest
     import asdf;
     import std.bigint;
     import std.datetime;
-    import std.conv;
+    import mir.conv;
 
     enum E : char
     {
@@ -91,7 +91,7 @@ pure unittest
         new C,
         [E.a : "A"],
         "escaped chars = '\\', '\"', '\t', '\r', '\n'");
-    assert(serializeToJson(cast(const)value) == json); // check serialization of const data
+    assert(serializeToJson(cast(const)value) == json, serializeToJson(cast(const)value)); // check serialization of const data
     assert(serializeToAsdf(value).to!string == json);
     assert(deserialize!S(json).serializeToJson == json);
 }
@@ -148,7 +148,7 @@ pure unittest
 unittest
 {
     import asdf;
-    import std.conv: to;
+    import mir.conv: to;
 
     static struct S
     {
@@ -263,7 +263,7 @@ unittest
 /// Support for floating point nan and (partial) infinity
 unittest
 {
-    import std.conv: to;
+    import mir.conv: to;
     import asdf;
 
     static struct Foo
@@ -302,7 +302,7 @@ import std.traits;
 import std.meta;
 import std.range.primitives;
 import std.functional;
-import std.conv;
+import mir.conv;
 import std.utf;
 import std.format: FormatSpec, formatValue;
 import std.bigint: BigInt;
@@ -411,7 +411,7 @@ Asdf serializeToAsdf(V)(auto ref V value, size_t initialLength = 32)
 unittest
 {
     import asdf;
-    import std.conv: to;
+    import mir.conv: to;
 
     struct S
     {
@@ -472,7 +472,7 @@ V deserialize(V)(Asdf data)
 /// Serializing struct Foo with disabled default ctor
 unittest
 {
-    import std.conv: to;
+    import mir.conv: to;
 
     static struct Foo
     {
@@ -581,7 +581,7 @@ version(unittest) private
             }
         }
 
-        string toString()
+        string toString() const
         {
             if (e == E.none)
                 return "NONE";
@@ -812,40 +812,6 @@ unittest
                 == UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46"));
 }
 
-///
-unittest
-{
-    import asdf;
-
-    import std.uuid;
-
-    static struct S
-    {
-        @serdeFlexible
-        uint a;
-    }
-
-    assert(`{"a":"100"}`.deserialize!S.a == 100);
-    assert(`{"a":true}`.deserialize!S.a == 1);
-    assert(`{"a":null}`.deserialize!S.a == 0);
-}
-
-///
-unittest
-{
-    import asdf;
-
-    static struct Vector
-    {
-        @serdeFlexible int x;
-        @serdeFlexible int y;
-    }
-
-    auto json = `[{"x":"1","y":2},{"x":null, "y": null},{"x":1, "y":2}]`;
-    auto decoded = json.deserialize!(Vector[]);
-    import std.conv;
-    assert(decoded == [Vector(1, 2), Vector(0, 0), Vector(1, 2)], decoded.text);
-}
 
 ///
 unittest
@@ -1336,7 +1302,7 @@ auto asdfSerializer(size_t initialLength = 32)
 unittest
 {
     import asdf;
-    import std.conv: to;
+    import mir.conv: to;
     import std.bigint;
     import std.format: singleSpec;
 
@@ -1788,7 +1754,7 @@ unittest
 /// Custom `serialize`
 unittest
 {
-    import std.conv: to;
+    import mir.conv: to;
 
     struct S
     {
@@ -1914,7 +1880,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                     value = -V.infinity;
                     return;
                 default:
-                    import std.conv : to;
+                    import mir.conv : to;
                     value = data.to!V;
             }
             return;
@@ -1955,9 +1921,8 @@ void deserializeValue(V)(Asdf data, ref V value)
     static if (hasUDA!(V, serdeProxy))
     {
         serdeGetProxy!V proxy;
-        enum F = hasUDA!(value, serdeFlexible);
         enum S = hasUDA!(value, serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
-        alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+        alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
         Fun(data, proxy);
         value = proxy.to!V;
     }
@@ -2104,7 +2069,7 @@ void deserializeValue(V : T[], T)(Asdf data, ref V value)
                 value = (()@trusted => uninitializedArray!(T[])(elems.save.count))();
                 foreach(ref e; value)
                 {
-                    import std.conv: emplace;
+                    import mir.conv: emplace;
                     cast(void)(()@trusted => emplace(&e, T.deserialize(elems.front)))();
                     if (0) //break safety if deserialize is not not safe
                         T.deserialize(elems.front);
@@ -2165,7 +2130,7 @@ unittest
             {
                 switch(elem.key)
                 {
-                    import std.conv: to;
+                    import mir.conv: to;
                     case "i":
                         int i = elem.value.to!int;
                         return typeof(this)(i);
@@ -2416,9 +2381,8 @@ void deserializeValue(V)(Asdf data, ref V value)
     static if (hasUDA!(V, serdeProxy))
     {{
         serdeGetProxy!V proxy;
-        enum F = hasUDA!(value, serdeFlexible);
         enum S = hasUDA!(value, serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
-        alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+        alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
         Fun(data, proxy);
         value = proxy.to!V;
         return;
@@ -2477,7 +2441,6 @@ void deserializeValue(V)(Asdf data, ref V value)
                 {
                     static foreach(member; serdeFinalProxyDeserializableMembers!V)
                     {{
-                            enum F = hasUDA!(__traits(getMember, value, member), serdeFlexible);
                             enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
                             static if (keys.length)
                             {
@@ -2502,7 +2465,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                     static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
                                     serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
                                     foreach(v; elem.value.byElement)
                                     {
                                         proxy = proxy.init;
@@ -2516,7 +2479,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                     static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
                                     serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
                                     foreach(v; elem.value.byKeyValue)
                                     {
                                         proxy = proxy.init;
@@ -2529,7 +2492,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 {
                                     serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(elem.value, proxy);
                                     __traits(getMember, value, member) = proxy.to!Type;
@@ -2538,7 +2501,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
                                 {
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeLikeStruct) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(elem.value, __traits(getMember, value, member));
                                 }
@@ -2547,7 +2510,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                     Type val;
 
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, val));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(elem.value, val);
                                     __traits(getMember, value, member) = val;
@@ -2568,7 +2531,6 @@ void deserializeValue(V)(Asdf data, ref V value)
             }
             static foreach(member; serdeFinalProxyDeserializableMembers!V)
             try {
-                enum F = hasUDA!(__traits(getMember, value, member), serdeFlexible);
                 enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
                 static if(keys.length)
                 {
@@ -2593,7 +2555,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
                                 {
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
                                     foreach(v; elem.value.byElement)
                                     {
                                         serdeGetProxy!(__traits(getMember, value, member)) proxy;
@@ -2605,7 +2567,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
                                 {
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
                                     foreach(v; elem.value.byKeyValue)
                                     {
                                         serdeGetProxy!(__traits(getMember, value, member)) proxy;
@@ -2618,7 +2580,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 {
                                     serdeGetProxy!(__traits(getMember, value, member)) proxy;
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, proxy));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(d, proxy);
                                     __traits(getMember, value, member) = proxy.to!Type;
@@ -2627,7 +2589,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
                                 {
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, __traits(getMember, value, member)));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(d, __traits(getMember, value, member));
                                 }
@@ -2636,7 +2598,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                     Type val;
 
                                     enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(d, val));
-                                    alias Fun = Select!(F, Flex, Select!(S, .deserializeScopedString, .deserializeValue));
+                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
 
                                     Fun(elem.value, val);
                                     __traits(getMember, value, member) = val;
@@ -2773,6 +2735,7 @@ unittest
     assert(val.acc == 210);
     assert(val.inner.a == 1005);
     assert(val.inner.m == 2002);
+    assert(val.serializeToJson == `{"id":"str","acc":210,"inner":{"a":1005,"m":2002}}`);
 }
 
 ///
@@ -2828,9 +2791,6 @@ alias serializationKeyOut = serdeKeyOut;
 
 deprecated("use @serdeIgnoreDefault instead")
 alias serializationIgnoreDefault = serdeIgnoreDefault;
-
-deprecated("use @serdeFlexible instead")
-alias serializationFlexible = serdeFlexible;
 
 deprecated("use @serdeLikeList instead")
 alias serializationLikeArray = serdeLikeList;

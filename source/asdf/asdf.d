@@ -173,7 +173,7 @@ struct Asdf
     // \uXXXX character support
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         assert(Asdf("begin\u000bend").to!string == `"begin\u000Bend"`);
         assert("begin\u000bend" == cast(string) `"begin\u000Bend"`.parseJson, to!string(cast(ubyte[]) cast(string)( `"begin\u000Bend"`.parseJson)));
@@ -189,7 +189,7 @@ struct Asdf
     ///
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
         asdfData["inner", "d"].remove;
@@ -287,7 +287,7 @@ struct Asdf
     ///
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         auto text = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
         const asdfData = text.parseJson;
@@ -650,7 +650,8 @@ struct Asdf
     {
         import std.datetime: SysTime, DateTime, usecs, UTC;
         import std.traits: isNumeric;
-        import std.conv: to, ConvException;
+        import mir.conv: to;
+        import std.conv: ConvException;
         import std.format: format;
         import std.math: trunc;
         import asdf.serialization;

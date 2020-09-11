@@ -270,9 +270,6 @@ unittest
 ///
 unittest
 {
-    import std.conv;
-    import std.algorithm : map;
-    import std.range : array;
     string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" ~ `{"key2": "b"}`;
     auto values = text.parseJsonByLine();
     assert( values.front["key"] == "a");
@@ -1220,7 +1217,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
 unittest
 {
-    import std.conv;
+    import mir.conv;
     auto asdf_data = parseJson(` [ true, 123 , [ false, 123.0 , "123211" ], "3e23e" ] `);
     auto str = asdf_data.to!string;
     auto str2 = `[true,123,[false,123.0,"123211"],"3e23e"]`;

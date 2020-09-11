@@ -125,7 +125,6 @@ For example, `-mattr=+sse4.2`. ASDF has specialized code for
 | `@serdeProxy!string` | call to!string |
 | `@serdeTransformIn!fin` | call function `fin` to transform the data |
 | `@serdeTransformOut!fout`  | run function `fout` on serialization, different notation |
-| `@serdeFlexible`  | be flexible on the datatype on reading, e.g. read longs that are wrapped as strings |
 | `@serdeRequired`  | Force deserialiser to throw AsdfException if field was not found in the input. |
 
 
@@ -361,16 +360,3 @@ struct S
 }
 assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
 ```
-
-##### serdeFlexible
-```D
-static struct S
-{
-	@serdeFlexible uint a;
-}
-
-assert(`{"a":"100"}`.deserialize!S.a == 100);
-assert(`{"a":true}`.deserialize!S.a == 1);
-assert(`{"a":null}`.deserialize!S.a == 0);
- ```
-
