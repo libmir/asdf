@@ -856,7 +856,7 @@ unittest
 
     static struct S
     {
-        @serdeTransformIn!"a + 2"
+        @serdeTransformIn!"a += 2"
         @serdeTransformOut!(a =>"str".repeat.take(a).joiner("_").to!string)
         int a;
     }
@@ -2497,7 +2497,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                                 static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
                                 {
                                     alias f = serdeGetTransformIn!(__traits(getMember, value, member));
-                                    __traits(getMember, value, member) = f(__traits(getMember, value, member));
+                                    f(__traits(getMember, value, member));
                                 }
 
                         break S;
