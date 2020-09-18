@@ -31,6 +31,7 @@ version(X86)
 
 version (D_Exceptions)
 {
+    import mir.serde: SerdeException;
     /++
     Serde Exception
     +/

@@ -22,7 +22,7 @@ import std.meta;
 import std.range.primitives;
 import std.traits;
 import std.typecons;
-
+import mir.serde: SerdeException;
 
 version(LDC)
 {

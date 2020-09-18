@@ -2220,98 +2220,6 @@ unittest
     assert(deserialize!T(`{"str":"txt","nested":{"f":123},"nval":false}`) == t);
 }
 
-private static immutable excm(string type, string member) = new SerdeException("ASDF deserialisation: multiple keys for member '" ~ member ~ "' in " ~ type ~ " are not allowed.");
-
-template deserializeValueMemberImpl(alias deserializeValue, alias deserializeScopedString)
-{
-    SerdeException deserializeValueMemberImpl(string member, Data, T, Context...)(Data data, ref T value, ref SerdeFlags!T requiredFlags, ref Context args)
-    {
-        static if (!hasUDA!(__traits(getMember, value, member), serdeAllowMultiple))
-            if (__traits(getMember, requiredFlags, member))
-                return excm!(T.stringof, member);
-
-        __traits(getMember, requiredFlags, member) = true;
-
-        static if(!__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}))
-        {
-            alias Type = Unqual!(Parameters!(__traits(getMember, value, member)));
-        }
-        else
-        {
-            alias Type = typeof(__traits(getMember, value, member));
-        }
-
-        static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
-        {
-            static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-            serdeGetProxy!(__traits(getMember, value, member)) proxy;
-            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
-            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-            foreach(v; data.byElement)
-            {
-                proxy = proxy.init;
-                if (auto exc = Fun(v, proxy, args))
-                    return exc;
-                __traits(getMember, value, member).put(proxy);
-            }
-        }
-        else
-        static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
-        {
-            static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-            serdeGetProxy!(__traits(getMember, value, member)) proxy;
-            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
-            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-            foreach(v; data.byKeyValue)
-            {
-                proxy = proxy.init;
-                if (auto exc = Fun(v.value, proxy, args))
-                    return exc;
-                __traits(getMember, value, member)[v.key.idup] = proxy;
-            }
-        }
-        else
-        static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
-        {
-            serdeGetProxy!(__traits(getMember, value, member)) proxy;
-            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
-            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-            if (auto exc = Fun(data, proxy))
-                return exc;
-            __traits(getMember, value, member) = proxy.to!Type;
-        }
-        else
-        static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
-        {
-            enum S = hasUDA!(__traits(getMember, value, member), serdeLikeStruct) && __traits(compiles, .deserializeScopedString(data, __traits(getMember, value, member)));
-            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-            if (auto exc = Fun(data, __traits(getMember, value, member)))
-                return exc;
-        }
-        else
-        {
-            Type val;
-
-            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, val));
-            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-            if (auto exc = Fun(data, val))
-                return exc;
-            __traits(getMember, value, member) = val;
-        }
-
-        static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
-        {
-            alias f = serdeGetTransformIn!(__traits(getMember, value, member));
-            f(__traits(getMember, value, member));
-        }
-
-        return null;
-    }
-}
-
 struct Impl
 {
 @safe pure @nogc static:
@@ -2338,9 +2246,6 @@ struct Impl
         return unexpectedKind(data.kind);
     }
 }
-
-///
-enum serdeRealOrderedIn;
 
 /// Deserialize aggregate value
 SerdeException deserializeValue(V)(Asdf data, ref V value)
@@ -2427,7 +2332,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
         {
             import std.meta: aliasSeqOf;
 
-            alias impl = deserializeValueMemberImpl!(deserialize, deserializeScopedString);
+            alias impl = deserializeValueMemberImpl!(deserializeValue, deserializeScopedString);
 
             static immutable exc(string member) = new SerdeException("ASDF deserialisation: non-optional member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
 
