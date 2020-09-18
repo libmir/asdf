@@ -2463,7 +2463,7 @@ void deserializeValue(V)(Asdf data, ref V value)
 
         static if (hasUDA!(V, serdeOrderedIn))
         {
-            SerdeOrderedDummy!V temporal;
+            SerdeOrderedDummy!(V, true) temporal;
             .deserializeValue(data, temporal);
             temporal.serdeFinalizeTarget(value, requiredFlags);
         }
