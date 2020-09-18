@@ -152,7 +152,7 @@ unittest
 private Asdf parseJson(Parser)(ref Parser parser) {
     size_t location;
     if (parser.parse(location))
-        throw new AsdfException(parser.lastError, location);
+        throw new AsdfSerdeException(parser.lastError, location);
     return Asdf(parser.result);
 }
 
@@ -170,7 +170,7 @@ auto parseJsonByLine(
 Parses JSON value in each line from a Range of buffers.
 Params:
     spaces = adds support for spaces beetwen json tokens. Default value is Yes.
-    throwOnInvalidLines = throws an $(LREF AsdfException) on invalid lines if Yes and ignore invalid lines if No. Default value is No.
+    throwOnInvalidLines = throws an $(LREF SerdeException) on invalid lines if Yes and ignore invalid lines if No. Default value is No.
     input = input range composed of elements type of `const(ubyte)[]` or string / const(char)[].
         `chunks` can use the same buffer for each chunk.
 Returns:
@@ -223,7 +223,7 @@ auto parseJsonByLine(
                     }
                 }
                 static if (throwOnInvalidLines)
-                    throw new AsdfException(parser.lastError);
+                    throw new SerdeException(parser.lastError);
                 else
                     parser.skipLine();
             }

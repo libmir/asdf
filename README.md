@@ -40,16 +40,16 @@ import asdf;
 
 struct Simple
 {
-	string name;
-	ulong level;
+    string name;
+    ulong level;
 }
 
 void main()
 {
-	auto o = Simple("asdf", 42);
-	string data = `{"name":"asdf","level":42}`;
-	assert(o.serializeToJson() == data);
-	assert(data.deserialize!Simple == o);
+    auto o = Simple("asdf", 42);
+    string data = `{"name":"asdf","level":42}`;
+    assert(o.serializeToJson() == data);
+    assert(data.deserialize!Simple == o);
 }
 ```
 #### Documentation
@@ -77,12 +77,12 @@ Now you need to edit the `dub.json` add `asdf` as dependency and set its targetT
 (dub.json)
 ```json
 {
-	...
-	"dependencies": {
-		"asdf": "~><current-version>"
-	},
-	"targetType": "executable",
-	"dflags-ldc": ["-mcpu=native"]
+    ...
+    "dependencies": {
+        "asdf": "~><current-version>"
+    },
+    "targetType": "executable",
+    "dflags-ldc": ["-mcpu=native"]
 }
 ```
 
@@ -139,23 +139,23 @@ import asdf;
 
 void main()
 {
-	auto target = Asdf("red");
-	File("input.jsonl")
-		// Use at least 4096 bytes for real world apps
-		.byChunk(4096)
-		// 32 is minimum size for internal buffer. Buffer can be reallocated to get more memory.
-		.parseJsonByLine(4096)
-		.filter!(object => object
-			// opIndex accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
-			["colors"]
-			// iterates over an array
-			.byElement
-			// Comparison with ASDF is little bit faster
-			//   than comparison with a string.
-			.canFind(target))
-			//.canFind("red"))
-		// Formatting uses internal buffer to reduce system delegate and system function calls
-		.each!writeln;
+    auto target = Asdf("red");
+    File("input.jsonl")
+        // Use at least 4096 bytes for real world apps
+        .byChunk(4096)
+        // 32 is minimum size for internal buffer. Buffer can be reallocated to get more memory.
+        .parseJsonByLine(4096)
+        .filter!(object => object
+            // opIndex accepts array of keys: {"key0": {"key1": { ... {"keyN-1": <value>}... }}}
+            ["colors"]
+            // iterates over an array
+            .byElement
+            // Comparison with ASDF is little bit faster
+            //   than comparison with a string.
+            .canFind(target))
+            //.canFind("red"))
+        // Formatting uses internal buffer to reduce system delegate and system function calls
+        .each!writeln;
 }
 ```
 
@@ -168,7 +168,7 @@ null
 {"colors": ["red"]}
 {"a":"b", "colors": [4, "red", "string"]}
 {"colors":["red"],
-	"comment" : "this is broken (multiline) object"}
+    "comment" : "this is broken (multiline) object"}
 {"colors": "green"}
 {"colors": "red"]}}
 []
@@ -188,11 +188,11 @@ null
 ```d
 struct S
 {
-	string a;
-	long b;
-	private int c; // private fields are ignored
-	package int d; // package fields are ignored
-	// all other fields in JSON are ignored
+    string a;
+    long b;
+    private int c; // private fields are ignored
+    package int d; // package fields are ignored
+    // all other fields in JSON are ignored
 }
 ```
 
@@ -200,17 +200,17 @@ struct S
 ```d
 struct S
 {
-	// ignored
-	@serdeIgnore int temp;
-	
-	// can be formatted to json
-	@serdeIgnoreIn int a;
-	
-	//can be parsed from json
-	@serdeIgnoreOut int b;
-	
-	// ignored if negative
-	@serdeIgnoreOutIf!`a < 0` int c;
+    // ignored
+    @serdeIgnore int temp;
+    
+    // can be formatted to json
+    @serdeIgnoreIn int a;
+    
+    //can be parsed from json
+    @serdeIgnoreOut int b;
+    
+    // ignored if negative
+    @serdeIgnoreOutIf!`a < 0` int c;
 }
 ```
 
@@ -218,14 +218,14 @@ struct S
 ```d
 struct S
 {
-	// key is overrided to "aaa"
-	@serdeKeys("aaa") int a;
+    // key is overrided to "aaa"
+    @serdeKeys("aaa") int a;
 
-	// overloads multiple keys for parsing
-	@serdeKeysIn("b", "_b")
-	// overloads key for generation
-	@serdeKeyOut("_b_")
-	int b;
+    // overloads multiple keys for parsing
+    @serdeKeysIn("b", "_b")
+    // overloads key for generation
+    @serdeKeyOut("_b_")
+    int b;
 }
 ```
 
@@ -233,20 +233,22 @@ struct S
 ```d
 struct DateTimeProxy
 {
-	DateTime datetime;
-	alias datetime this;
+    DateTime datetime;
+    alias datetime this;
 
-	static DateTimeProxy deserialize(Asdf data)
-	{
-		string val;
-		deserializeScopedString(data, val);
-		return DateTimeProxy(DateTime.fromISOString(val));
-	}
+    SerdeException deserializeFromAsdf(Asdf data)
+    {
+        string val;
+        if (auto exc = deserializeScopedString(data, val))
+            return exc;
+        this = DateTimeProxy(DateTime.fromISOString(val));
+        return null;
+    }
 
-	void serialize(S)(ref S serializer)
-	{
-		serializer.putValue(datetime.toISOString);
-	}
+    void serialize(S)(ref S serializer)
+    {
+        serializer.putValue(datetime.toISOString);
+    }
 }
 ```
 
@@ -254,11 +256,11 @@ struct DateTimeProxy
 //serialize a Doubly Linked list into an Array
 struct SomeDoublyLinkedList
 {
-	@serdeIgnore DList!(SomeArr[]) myDll;
-	alias myDll this;
+    @serdeIgnore DList!(SomeArr[]) myDll;
+    alias myDll this;
 
-	//no template but a function this time!
-	void serialize(ref AsdfSerializer serializer)
+    //no template but a function this time!
+    void serialize(ref AsdfSerializer serializer)
     {
         auto state = serializer.arrayBegin();
         foreach (ref elem; myDll)
@@ -275,7 +277,7 @@ struct SomeDoublyLinkedList
 ```d
 struct S
 {
-	@serdeProxy!DateTimeProxy DateTime time;
+    @serdeProxy!DateTimeProxy DateTime time;
 }
 ```
 
@@ -283,58 +285,58 @@ struct S
 @serdeProxy!ProxyE
 enum E
 {
-	none,
-	bar,
+    none,
+    bar,
 }
 
 // const(char)[] doesn't reallocate ASDF data.
 @serdeProxy!(const(char)[])
 struct ProxyE
 {
-	E e;
+    E e;
 
-	this(E e)
-	{
-		this.e = e;
-	}
+    this(E e)
+    {
+        this.e = e;
+    }
 
-	this(in char[] str)
-	{
-		switch(str)
-		{
-			case "NONE":
-			case "NA":
-			case "N/A":
-				e = E.none;
-				break;
-			case "BAR":
-			case "BR":
-				e = E.bar;
-				break;
-			default:
-				throw new Exception("Unknown: " ~ cast(string)str);
-		}
-	}
+    this(in char[] str)
+    {
+        switch(str)
+        {
+            case "NONE":
+            case "NA":
+            case "N/A":
+                e = E.none;
+                break;
+            case "BAR":
+            case "BR":
+                e = E.bar;
+                break;
+            default:
+                throw new Exception("Unknown: " ~ cast(string)str);
+        }
+    }
 
-	string toString()
-	{
-		if (e == E.none)
-			return "NONE";
-		else
-			return "BAR";
-	}
+    string toString()
+    {
+        if (e == E.none)
+            return "NONE";
+        else
+            return "BAR";
+    }
 
-	E opCast(T : E)()
-	{
-		return e;
-	}
+    E opCast(T : E)()
+    {
+        return e;
+    }
 }
 
 unittest
 {
-	assert(serializeToJson(E.bar) == `"BAR"`);
-	assert(`"N/A"`.deserialize!E == E.none);
-	assert(`"NA"`.deserialize!E == E.none);
+    assert(serializeToJson(E.bar) == `"BAR"`);
+    assert(`"N/A"`.deserialize!E == E.none);
+    assert(`"NA"`.deserialize!E == E.none);
 }
 ```
 
@@ -345,18 +347,18 @@ If you need to do additional calculations or etl transformations that happen to 
 ```d
 struct S
 {
-	string a;
-	int b;
+    string a;
+    int b;
 
-	@serdeIgnoreIn double sum;
+    @serdeIgnoreIn double sum;
 
-	void finalizeDeserialization(Asdf data)
-	{
-		auto r = data["c", "d"];
-		auto a = r["e"].get(0.0);
-		auto b = r["g"].get(0.0);
-		sum = a + b;
-	}
+    void finalizeDeserialization(Asdf data)
+    {
+        auto r = data["c", "d"];
+        auto a = r["e"].get(0.0);
+        auto b = r["g"].get(0.0);
+        sum = a + b;
+    }
 }
 assert(`{"a":"bar","b":3,"c":{"d":{"e":6,"g":7}}}`.deserialize!S == S("bar", 3, 13));
 ```

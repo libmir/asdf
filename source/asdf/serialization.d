@@ -17,7 +17,8 @@ import std.range.primitives: isOutputRange;
 public import mir.serde;
 
 ///
-pure unittest
+pure
+unittest
 {
     import asdf;
     import std.bigint;
@@ -56,11 +57,13 @@ pure unittest
         DateTime datetime;
         alias datetime this;
 
-        static DateTimeProxy deserialize(Asdf data) pure
+        SerdeException deserializeFromAsdf()(Asdf data)
         {
             string val;
-            deserializeScopedString(data, val);
-            return DateTimeProxy(DateTime.fromISOString(val));
+            if (auto exc = deserializeScopedString(data, val))
+                return exc;
+            this = DateTimeProxy(DateTime.fromISOString(val));
+            return null;
         }
 
         void serialize(S)(ref S serializer) pure
@@ -298,52 +301,35 @@ unittest
     assert (deserialize!Foo(`{"f":"-inf"}`) == Foo(-float.infinity));
 }
 
-import std.traits;
+import asdf.asdf;
+import mir.conv;
+import std.bigint: BigInt;
+import std.format: FormatSpec, formatValue;
+import std.functional;
 import std.meta;
 import std.range.primitives;
-import std.functional;
-import mir.conv;
+import std.traits;
 import std.utf;
-import std.format: FormatSpec, formatValue;
-import std.bigint: BigInt;
-import asdf.asdf;
 
-///
-class DeserializationException: AsdfException
+deprecated("use mir.serde: SerdeException instead")
+alias DeserializationException = SerdeException;
+
+private SerdeException unexpectedKind(string msg = "Unexpected ASDF kind")(ubyte kind)
+    @safe pure nothrow @nogc
 {
-    ///
-    ubyte kind;
+    import mir.conv: to;
+    static immutable exc(Asdf.Kind kind) = new SerdeException(msg ~ " " ~ kind.to!string);
 
-    ///
-    string func;
-
-    ///
-    this(
-        ubyte kind,
-        string msg = "Unexpected ASDF kind",
-        string func = __PRETTY_FUNCTION__,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        Throwable next = null) pure nothrow @nogc @safe
+    switch (kind)
     {
-        this.kind = kind;
-        this.func = func;
-        super(msg, file, line, next);
+        foreach (member; EnumMembers!(Asdf.Kind))
+        {case member:
+            return exc!member;
+        }
+        default:
+            static immutable ret = new SerdeException("Wrong encoding of ASDF kind");
+            return ret;
     }
-
-    ///
-    this(
-        ubyte kind,
-        string msg,
-        Throwable next,
-        string func = __PRETTY_FUNCTION__,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        ) pure nothrow @nogc @safe
-    {
-        this(kind, msg, func, file, line, next);
-    }
-
 }
 
 /// JSON serialization function.
@@ -422,90 +408,13 @@ unittest
     assert(serializeToAsdf(S("str", 4)).to!string == `{"foo":"str","bar":4}`);
 }
 
-/// Check if type T has static templated method allowing to
-/// deserialize instance of T from range R like
-/// ```
-///     R r;
-///     ...
-///     auto t = T.deserialize(r); // ok
-/// ```
-private template hasStaticTemplatedDeserialize(T, R)
-{
-    import std.traits : hasMember;
-
-    static if (
-        // T shall have the method `deserialize`
-        hasMember!(T, "deserialize") &&
-        // this method shall be templated
-        __traits(isTemplate, T.deserialize))
-    {
-        // this method shall be templated by R type,
-        // takes it as only argument and
-        static assert(is(typeof(T.deserialize(R.init))),
-            "To be usable with Asdf library signature of `" ~ T.stringof ~ ".deserialize` shall be the following: `deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)`. (* Now it has " ~ __traits(getMember, T, "deserialize").stringof ~ " *). If it exists check if it compiles.");
-        // returns result of T type);
-        static assert(is(typeof(T.deserialize(R.init)) == T),
-            "To be usable with Asdf library method `" ~ T.stringof ~ ".deserialize(" ~ R.stringof ~ ")(" ~ R.stringof ~ " arg)` shall have return type `" ~ T.stringof ~ "` instead of `" ~ typeof(T.deserialize(R.init)).stringof ~ "`");
-        enum hasStaticTemplatedDeserialize = true;
-    }
-    else
-    {
-        enum hasStaticTemplatedDeserialize = false;
-    }
-}
-
 /// Deserialization function
 V deserialize(V)(Asdf data)
 {
-    static if (hasStaticTemplatedDeserialize!(V, Asdf))
-    {
-        return V.deserialize(data);
-    }
-    else
-    {
-        V value;
-        deserializeValue(data, value);
-        return value;
-    }
-}
-
-/// Serializing struct Foo with disabled default ctor
-unittest
-{
-    import mir.conv: to;
-
-    static struct Foo
-    {
-        int i;
-
-        @disable
-        this();
-
-        this(int i)
-        {
-            this.i = i;
-        }
-
-        static auto deserialize(D)(auto ref D deserializer)
-        {
-            import asdf : deserialize;
-
-            foreach(elem; deserializer.byKeyValue)
-            {
-                switch(elem.key)
-                {
-                    case "i":
-                        int i = elem.value.to!int;
-                        return typeof(this)(i);
-                    default:
-                }
-            }
-
-            return typeof(this).init;
-        }
-    }
-
-    assert(deserialize!Foo(serializeToAsdf(Foo(6))) == Foo(6));
+    V value;
+    if (auto exc = deserializeValue(data, value))
+        throw exc;
+    return value;
 }
 
 /// ditto
@@ -632,7 +541,6 @@ pure unittest
     import std.exception;
     struct S
     {
-        @serdeRequired
         string field;
     }
     assert(`{"field":"val"}`.deserialize!S.field == "val");
@@ -1743,33 +1651,34 @@ unittest
 
 
 /// Deserialize `null` value
-void deserializeValue(T : typeof(null))(Asdf data, T)
+SerdeException deserializeValue(T : typeof(null))(Asdf data, T)
 {
     auto kind = data.kind;
     if(kind != Asdf.Kind.null_)
-        throw new DeserializationException(kind);
+        return unexpectedKind(kind);
+    return null;
 }
 
 ///
 unittest
 {
-    deserializeValue(serializeToAsdf(null), null);
+    assert(deserializeValue(serializeToAsdf(null), null) is null);
 }
 
 /// Deserialize boolean value
-void deserializeValue(T : bool)(Asdf data, ref T value) pure @safe
+SerdeException deserializeValue(T : bool)(Asdf data, ref T value) pure @safe
 {
     auto kind = data.kind;
     with(Asdf.Kind) switch(kind)
     {
         case false_:
             value = false;
-            return;
+            return null;
         case true_:
             value = true;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -1807,8 +1716,8 @@ $(TABLE
 )
 
 +/
-void deserializeValue(V)(Asdf data, ref V value)
-    if((isNumeric!V && !is(V == enum)) || is(V == BigInt))
+SerdeException deserializeValue(V)(Asdf data, ref V value)
+    if((isNumeric!V && !is(V == enum)))
 {
     auto kind = data.kind;
 
@@ -1817,7 +1726,7 @@ void deserializeValue(V)(Asdf data, ref V value)
         if (kind == Asdf.Kind.null_)
         {
             value = V.nan;
-            return;
+            return null;
         }
         if (kind == Asdf.Kind.string)
         {
@@ -1835,7 +1744,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                 case "NaN":
                 case "nan":
                     value = V.nan;
-                    return;
+                    return null;
                 case "+INF":
                 case "+Inf":
                 case "+inf":
@@ -1843,23 +1752,24 @@ void deserializeValue(V)(Asdf data, ref V value)
                 case "Inf":
                 case "inf":
                     value = V.infinity;
-                    return;
+                    return null;
                 case "-INF":
                 case "-Inf":
                 case "-inf":
                     value = -V.infinity;
-                    return;
+                    return null;
                 default:
                     import mir.conv : to;
                     value = data.to!V;
+                    return null;
             }
-            return;
         }
     }
 
     if(kind != Asdf.Kind.number)
-        throw new DeserializationException(kind);
+        return unexpectedKind(kind);
     value = (cast(string) data.data[2 .. $]).to!V;
+    return null;
 }
 
 ///
@@ -1885,7 +1795,7 @@ unittest
 }
 
 /// Deserialize enum value
-void deserializeValue(V)(Asdf data, ref V value)
+SerdeException deserializeValue(V)(Asdf data, ref V value)
     if(is(V == enum))
 {
     static if (hasUDA!(V, serdeProxy))
@@ -1903,6 +1813,7 @@ void deserializeValue(V)(Asdf data, ref V value)
         if (!serdeParseEnum(s, value))
             throw new Exception("Unable to deserialize string '" ~ s.idup ~ "' to " ~ V.stringof);
     }
+    return null;
 }
 
 ///
@@ -1917,19 +1828,19 @@ unittest
 Deserializes scoped string value.
 This function does not allocate a new string and just make a raw cast of ASDF data.
 +/
-void deserializeScopedString(V : const(char)[])(Asdf data, ref V value)
+SerdeException deserializeScopedString(V : const(char)[])(Asdf data, ref V value)
 {
     auto kind = data.kind;
     with(Asdf.Kind) switch(kind)
     {
         case string:
             value = cast(V) data.data[5 .. $];
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -1937,7 +1848,7 @@ void deserializeScopedString(V : const(char)[])(Asdf data, ref V value)
 Deserializes string value.
 This function allocates new string.
 +/
-void deserializeValue(V)(Asdf data, ref V value)
+SerdeException deserializeValue(V)(Asdf data, ref V value)
     if(is(V : const(char)[]) && !isAggregateType!V && !is(V == enum) && !isNullable!V)
 {
     auto kind = data.kind;
@@ -1945,12 +1856,12 @@ void deserializeValue(V)(Asdf data, ref V value)
     {
         case string:
             value = (() @trusted => cast(V) (data.data[5 .. $]).dup)();
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -2007,10 +1918,10 @@ unittest
 }
 
 /// Deserialize single char
-void deserializeValue(V)(Asdf data, ref V value)
+SerdeException deserializeValue(V)(Asdf data, ref V value)
     if (is(V == char) && !is(V == enum))
 {
-    deserializeValue(data, *(()@trusted=> cast(char[1]*)&value)());
+    return deserializeValue(data, *(()@trusted=> cast(char[1]*)&value)());
 }
 
 ///
@@ -2021,7 +1932,7 @@ unittest
 }
 
 /// Deserialize array
-void deserializeValue(V : T[], T)(Asdf data, ref V value)
+SerdeException deserializeValue(V : T[], T)(Asdf data, ref V value)
     if(!isSomeChar!T && !isStaticArray!V)
 {
     const kind = data.kind;
@@ -2031,41 +1942,25 @@ void deserializeValue(V : T[], T)(Asdf data, ref V value)
             import std.algorithm.searching: count;
             auto elems = data.byElement;
             // create array of properly initialized (by means of ctor) elements
-            static if (hasStaticTemplatedDeserialize!(T, Asdf))
-            {
-                // create array of uninitialized elements
-                // and initialize them using static `deserialize`
-
-                import std.array : uninitializedArray;
-                value = (()@trusted => uninitializedArray!(T[])(elems.save.count))();
-                foreach(ref e; value)
-                {
-                    import mir.conv: emplace;
-                    cast(void)(()@trusted => emplace(&e, T.deserialize(elems.front)))();
-                    if (0) //break safety if deserialize is not not safe
-                        T.deserialize(elems.front);
-                    elems.popFront;
-                }
-            }
-            else
-            static if (__traits(compiles, {value = new T[elems.save.count];}))
+            static if (__traits(compiles, {value = new T[100];}))
             {
                 value = new T[elems.save.count];
                 foreach(ref e; value)
                 {
-                    .deserializeValue(elems.front, e);
+                    if (auto exc = .deserializeValue(elems.front, e))
+                        return exc;
                     elems.popFront;
                 }
             }
             else
-                static assert(0, "Type `" ~ T.stringof ~ "` should have either default ctor or static `T.deserialize(R)(R r)` method!");
+                static assert(0, "Type `" ~ T.stringof ~ "` should have default value!");
             assert(elems.empty);
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -2081,6 +1976,8 @@ unittest
 ///
 unittest
 {
+    import asdf;
+
     static struct Foo
     {
         int i;
@@ -2093,34 +1990,24 @@ unittest
             this.i = i;
         }
 
-        static auto deserialize(D)(auto ref D deserializer)
+        SerdeException deserializeFromAsdf()(Asdf data)
         {
-            import asdf : deserialize;
-
-            foreach(elem; deserializer.byKeyValue)
-            {
-                switch(elem.key)
-                {
-                    import mir.conv: to;
-                    case "i":
-                        int i = elem.value.to!int;
-                        return typeof(this)(i);
-                    default:
-                }
-            }
-
-            return typeof(this).init;
+            string val;
+            if (auto exc = deserializeScopedString(data, val))
+                return exc;
+            this = DateTimeProxy(DateTime.fromISOString(val));
+            return null;
         }
     }
 
-    assert(deserialize!(Foo[])(serializeToJson(null)) is null);
-    assert(deserialize!(Foo[])(serializeToAsdf(null)) is null);
-    assert(deserialize!(Foo[])(serializeToJson([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
-    assert(deserialize!(Foo[])(serializeToAsdf([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
+    // assert(deserialize!(Foo[])(serializeToJson(null)) is null);
+    // assert(deserialize!(Foo[])(serializeToAsdf(null)) is null);
+    // assert(deserialize!(Foo[])(serializeToJson([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
+    // assert(deserialize!(Foo[])(serializeToAsdf([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
 }
 
 /// Deserialize static array
-void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
+SerdeException deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 {
     auto kind = data.kind;
     with(Asdf.Kind) switch(kind)
@@ -2138,22 +2025,23 @@ void deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 
             import std.algorithm : copy;
             copy(str, value[]);
-            return;
+            return null;
         }
         case array:
             auto elems = data.byElement;
             foreach(ref e; value)
             {
                 if(elems.empty)
-                    return;
-                .deserializeValue(elems.front, e);
+                    return null;
+                if (auto exc = .deserializeValue(elems.front, e))
+                    return exc;
                 elems.popFront;
             }
-            return;
+            return null;
         case null_:
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind, "Failed to deserialize value of " ~ V.stringof);
+            return unexpectedKind!("Failed to deserialize value of " ~ V.stringof)(kind);
     }
 }
 
@@ -2186,7 +2074,7 @@ unittest
 }
 
 /// Deserialize string-value associative array
-void deserializeValue(V : T[string], T)(Asdf data, ref V value)
+SerdeException deserializeValue(V : T[string], T)(Asdf data, ref V value)
 {
     auto kind = data.kind;
     with(Asdf.Kind) switch(kind)
@@ -2195,15 +2083,16 @@ void deserializeValue(V : T[string], T)(Asdf data, ref V value)
             foreach(elem; data.byKeyValue)
             {
                 T v;
-                .deserializeValue(elem.value, v);
+                if (auto exc = .deserializeValue(elem.value, v))
+                    return exc;
                 value[elem.key.idup] = v;
             }
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -2224,7 +2113,7 @@ unittest
 }
 
 /// Deserialize enumeration-value associative array
-void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
+SerdeException deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
     if(is(E == enum))
 {
     auto kind = data.kind;
@@ -2234,15 +2123,16 @@ void deserializeValue(V : T[E], T, E)(Asdf data, ref V value)
             foreach(elem; data.byKeyValue)
             {
                 T v;
-                .deserializeValue(elem.value, v);
+                if (auto exc = .deserializeValue(elem.value, v))
+                    return exc;
                 value[elem.key.to!E] = v;
             }
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -2265,7 +2155,7 @@ unittest
 }
 
 /// Deserialize associative array with integral type key
-void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
+SerdeException deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
     if((isIntegral!K) && !is(K == enum))
 {
     auto kind = data.kind;
@@ -2275,15 +2165,16 @@ void deserializeValue(V : T[K], T, K)(Asdf data, ref V value)
             foreach(elem; data.byKeyValue)
             {
                 T v;
-                .deserializeValue(elem.value, v);
+                if (auto exc = .deserializeValue(elem.value, v))
+                    return exc;
                 value[elem.key.to!K] = v;
             }
-            return;
+            return null;
         case null_:
             value = null;
-            return;
+            return null;
         default:
-            throw new DeserializationException(kind);
+            return unexpectedKind(kind);
     }
 }
 
@@ -2301,21 +2192,6 @@ unittest
     int[int] r = [3 : 1];
     serializeToAsdf(null).deserializeValue(r);
     assert(r is null);
-}
-
-/// Deserialize Nullable value
-void deserializeValue(V)(Asdf data, ref V value)
-    if(isNullable!V)
-{
-    if (data.kind == Asdf.Kind.null_)
-    {
-        value.nullify;
-        return;
-    }
-
-    typeof(value.get) payload;
-    .deserializeValue(data, payload);
-    value = payload;
 }
 
 ///
@@ -2344,40 +2220,183 @@ unittest
     assert(deserialize!T(`{"str":"txt","nested":{"f":123},"nval":false}`) == t);
 }
 
-private static void Flex(V)(Asdf a, ref V v) { v = a.to!V; }
+private static immutable excm(string type, string member) = new SerdeException("ASDF deserialisation: multiple keys for member '" ~ member ~ "' in " ~ type ~ " are not allowed.");
+
+template deserializeValueMemberImpl(alias deserializeValue, alias deserializeScopedString)
+{
+    SerdeException deserializeValueMemberImpl(string member, Data, T, Context...)(Data data, ref T value, ref SerdeFlags!T requiredFlags, ref Context args)
+    {
+        static if (!hasUDA!(__traits(getMember, value, member), serdeAllowMultiple))
+            if (__traits(getMember, requiredFlags, member))
+                return excm!(T.stringof, member);
+
+        __traits(getMember, requiredFlags, member) = true;
+
+        static if(!__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}))
+        {
+            alias Type = Unqual!(Parameters!(__traits(getMember, value, member)));
+        }
+        else
+        {
+            alias Type = typeof(__traits(getMember, value, member));
+        }
+
+        static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
+        {
+            static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+            serdeGetProxy!(__traits(getMember, value, member)) proxy;
+            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
+            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
+            foreach(v; data.byElement)
+            {
+                proxy = proxy.init;
+                if (auto exc = Fun(v, proxy, args))
+                    return exc;
+                __traits(getMember, value, member).put(proxy);
+            }
+        }
+        else
+        static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
+        {
+            static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
+            serdeGetProxy!(__traits(getMember, value, member)) proxy;
+            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
+            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
+            foreach(v; data.byKeyValue)
+            {
+                proxy = proxy.init;
+                if (auto exc = Fun(v.value, proxy, args))
+                    return exc;
+                __traits(getMember, value, member)[v.key.idup] = proxy;
+            }
+        }
+        else
+        static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
+        {
+            serdeGetProxy!(__traits(getMember, value, member)) proxy;
+            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
+            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
+
+            if (auto exc = Fun(data, proxy))
+                return exc;
+            __traits(getMember, value, member) = proxy.to!Type;
+        }
+        else
+        static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
+        {
+            enum S = hasUDA!(__traits(getMember, value, member), serdeLikeStruct) && __traits(compiles, .deserializeScopedString(data, __traits(getMember, value, member)));
+            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
+
+            if (auto exc = Fun(data, __traits(getMember, value, member)))
+                return exc;
+        }
+        else
+        {
+            Type val;
+
+            enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(data, val));
+            alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
+
+            if (auto exc = Fun(data, val))
+                return exc;
+            __traits(getMember, value, member) = val;
+        }
+
+        static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
+        {
+            alias f = serdeGetTransformIn!(__traits(getMember, value, member));
+            f(__traits(getMember, value, member));
+        }
+
+        return null;
+    }
+}
+
+struct Impl
+{
+@safe pure @nogc static:
+
+    enum customDeserializeValueMehtodName = "deserializeFromAsdf";
+
+    bool isAnyNull(Asdf data)
+    {
+        return data.kind == Asdf.Kind.null_;
+    }
+
+    bool isObjectNull(Asdf data)
+    {
+        return data.kind == Asdf.Kind.null_;
+    }
+
+    bool isObject(Asdf data)
+    {
+        return data.kind == Asdf.Kind.object;
+    }
+
+    SerdeException unexpectedData(string msg)(Asdf data)
+    {
+        return unexpectedKind(data.kind);
+    }
+}
+
+///
+enum serdeRealOrderedIn;
 
 /// Deserialize aggregate value
-void deserializeValue(V)(Asdf data, ref V value)
-    if(!isNullable!V && isAggregateType!V && !is(V : BigInt))
+SerdeException deserializeValue(V)(Asdf data, ref V value)
+    if(isAggregateType!V)
 {
+    static if (is(V == BigInt))
+    {
+        if (data.kind != Asdf.Kind.number)
+            return unexpectedKind(data.kind);
+        value = BigInt((()@trusted => cast(string) data.data[2 .. $])());
+        return null;
+    }
+    else
+    static if (__traits(hasMember, value, "deserializeFromAsdf"))
+    {
+        return __traits(getMember, value, "deserializeFromAsdf")(data);
+    }
+    else
+    static if (isNullable!V)
+    {
+        if (data.kind == Asdf.Kind.null_)
+        {
+            value.nullify;
+            return null;
+        }
+
+        typeof(value.get) payload;
+        if (auto exc = .deserializeValue(data, payload))
+            return exc;
+        value = payload;
+        return null;
+    }
+    else
     static if (hasUDA!(V, serdeProxy))
     {{
         serdeGetProxy!V proxy;
         enum S = hasUDA!(value, serdeScoped) && __traits(compiles, .deserializeScopedString(data, proxy));
         alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-        Fun(data, proxy);
+        if (auto exc = Fun(data, proxy))
+            return exc;
         value = proxy.to!V;
-        return;
+        return null;
     }}
     else
-    static if (__traits(hasMember, V, "deserialize"))
     {
-        value = V.deserialize(data);
-    }
-    else try
-    {
-        auto kind = data.kind;
-        if(kind != Asdf.Kind.object)
+        if (!(data.kind == Asdf.Kind.object))
         {
             static if(__traits(compiles, value = null))
             {
-                if (kind == Asdf.Kind.null_)
+                if (data.kind == Asdf.Kind.null_)
                 {
                     value = null;
-                    return;
+                    return null;
                 }
             }
-            throw new DeserializationException(kind);
+            return unexpectedKind!("Cann't desrialize " ~ V.stringof ~ ". Unexpected data:")(data.kind);
         }
 
         static if(is(V == class) || is(V == interface))
@@ -2390,7 +2409,7 @@ void deserializeValue(V)(Asdf data, ref V value)
                 }
                 else
                 {
-                    throw new DeserializationException(data.kind, "Object / interface must be either not null or have a a default constructor.");
+                    return unexpectedKind(data.kind, "Object / interface must be either not null or have a a default constructor.");
                 }
             }
         }
@@ -2399,119 +2418,76 @@ void deserializeValue(V)(Asdf data, ref V value)
 
         static if (hasUDA!(V, serdeOrderedIn))
         {
-            SerdeOrderedDummy!(V, true) temporal;
-            .deserializeValue(data, temporal);
+            SerdeOrderedDummy!V temporal;
+            if (auto exc = .deserializeValue(data, temporal))
+                return exc;
             temporal.serdeFinalizeTarget(value, requiredFlags);
         }
         else
         {
             import std.meta: aliasSeqOf;
 
+            alias impl = deserializeValueMemberImpl!(deserialize, deserializeScopedString);
 
-            foreach(elem; data.byKeyValue)
+            static immutable exc(string member) = new SerdeException("ASDF deserialisation: non-optional member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
+
+            static if (hasUDA!(V, serdeRealOrderedIn))
             {
-                static immutable excm(string member) = new AsdfException("ASDF deserialisation: multiple keys for member '" ~ member ~ "' in " ~ V.stringof ~ " are not allowed.");
-                S: switch(elem.key)
+                static foreach(member; serdeFinalProxyDeserializableMembers!V)
+                {{
+                    enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
+                    static if (keys.length)
+                    {
+                        foreach(elem; data.byKeyValue)
+                        {
+                            switch(elem.key)
+                            {
+                                static foreach (key; keys)
+                                {
+                                case key:
+                                }
+                                    if (auto mexp = impl!member(elem.value, value, requiredFlags))
+                                        return mexp;
+                                    break;
+                                default:
+                            }
+                        }
+                    }
+
+                    static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
+                        if (!__traits(getMember, requiredFlags, member))
+                            return exc!member;
+                }}
+            }
+            else
+            {
+                foreach(elem; data.byKeyValue)
                 {
-                    static foreach(member; serdeFinalProxyDeserializableMembers!V)
-                    {{
+                    S: switch(elem.key)
+                    {
+                        static foreach(member; serdeFinalProxyDeserializableMembers!V)
+                        {{
                             enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
                             static if (keys.length)
                             {
-                                foreach (key; aliasSeqOf!keys)
+                                static foreach (key; keys)
                                 {
-                    case key:
+                        case key:
                                 }
-
-                                static if (!hasUDA!(__traits(getMember, value, member), serdeAllowMultiple))
-                                    if (__traits(getMember, requiredFlags, member))
-                                        throw excm!member;
-
-                                __traits(getMember, requiredFlags, member) = true;
-
-                                static if(!__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}))
-                                {
-                                    alias Type = Unqual!(Parameters!(__traits(getMember, value, member)));
-                                }
-                                else
-                                {
-                                    alias Type = typeof(__traits(getMember, value, member));
-                                }
-
-                                static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
-                                {
-                                    static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-                                    foreach(v; elem.value.byElement)
-                                    {
-                                        proxy = proxy.init;
-                                        Fun(v, proxy);
-                                        __traits(getMember, value, member).put(proxy);
-                                    }
-                                }
-                                else
-                                static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
-                                {
-                                    static assert(hasUDA!(__traits(getMember, value, member), serdeProxy), V.stringof ~ "." ~ member ~ " should have a Proxy type for deserialization");
-                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-                                    foreach(v; elem.value.byKeyValue)
-                                    {
-                                        proxy = proxy.init;
-                                        Fun(v.value, proxy);
-                                        __traits(getMember, value, member)[elem.key.idup] = proxy;
-                                    }
-                                }
-                                else
-                                static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
-                                {
-                                    serdeGetProxy!(__traits(getMember, value, member)) proxy;
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, proxy));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(elem.value, proxy);
-                                    __traits(getMember, value, member) = proxy.to!Type;
-                                }
-                                else
-                                static if(__traits(compiles, {__traits(getMember, value, member) = __traits(getMember, value, member);}) && __traits(compiles, {auto ptr = &__traits(getMember, value, member); }))
-                                {
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeLikeStruct) && __traits(compiles, .deserializeScopedString(elem.value, __traits(getMember, value, member)));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(elem.value, __traits(getMember, value, member));
-                                }
-                                else
-                                {
-                                    Type val;
-
-                                    enum S = hasUDA!(__traits(getMember, value, member), serdeScoped) && __traits(compiles, .deserializeScopedString(elem.value, val));
-                                    alias Fun = Select!(S, .deserializeScopedString, .deserializeValue);
-
-                                    Fun(elem.value, val);
-                                    __traits(getMember, value, member) = val;
-                                }
-
-                                static if(hasUDA!(__traits(getMember, value, member), serdeTransformIn))
-                                {
-                                    alias f = serdeGetTransformIn!(__traits(getMember, value, member));
-                                    f(__traits(getMember, value, member));
-                                }
-
-                        break S;
-
+                            if (auto mexp = impl!member(elem.value, value, requiredFlags))
+                                return mexp;
+                            break S;
                             }
-                    }}
-                    default:
+                        }}
+                        default:
+                    }
                 }
+
+                static foreach(member; __traits(allMembers, SerdeFlags!V))
+                    static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
+                        if (!__traits(getMember, requiredFlags, member))
+                            return exc!member;
             }
-            static immutable exc(string member) = new AsdfException("ASDF deserialisation: non-optional member '" ~ member ~ "' in " ~ V.stringof ~ " is missing.");
-            static foreach(member; __traits(allMembers, SerdeFlags!V))
-                static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
-                    if (!__traits(getMember, requiredFlags, member))
-                        throw exc!member;
         }
 
         static if(__traits(hasMember, V, "finalizeDeserialization"))
@@ -2526,14 +2502,7 @@ void deserializeValue(V)(Asdf data, ref V value)
         {
             value.serdeFinalize();
         }
-    }
-    catch (DeserializationException e)
-    {
-        throw e;
-    }
-    catch (AsdfException e)
-    {
-        throw new DeserializationException(Asdf.Kind.object, "Failed to deserialize type " ~ V.stringof, e);
+        return null;
     }
 }
 
@@ -2586,6 +2555,53 @@ unittest
     }
 
     @serdeOrderedIn
+    static struct S
+    {
+        import mir.small_string;
+
+        SmallString!8 id;
+
+        int acc;
+
+        I inner = I(1000, 0);
+
+    @safe pure nothrow @nogc
+    @property:
+
+        void add(int v)
+        {
+            inner.a += v;
+            acc += v;
+        }
+
+        void mul(int v)
+        {
+            inner.m += v;
+            acc *= v;
+        }
+    }
+
+    import mir.reflection;
+
+    auto val = `{"mul":2, "id": "str", "add":5,"acc":100, "inner":{"m": 2000}}`.deserialize!S;
+    assert(val.id == "str");
+    assert(val.acc == 210);
+    assert(val.inner.a == 1005);
+    assert(val.inner.m == 2002);
+    assert(val.serializeToJson == `{"id":"str","acc":210,"inner":{"a":1005,"m":2002}}`);
+}
+
+/// `serdeRealOrderedIn` supprot
+unittest
+{
+    static struct I
+    {
+        @serdeOptional
+        int a;
+        int m;
+    }
+
+    @serdeRealOrderedIn
     static struct S
     {
         import mir.small_string;
@@ -2696,6 +2712,3 @@ alias serializationTransformOut = serdeTransformOut;
 
 deprecated("use @serdeScoped instead")
 alias serializationScoped = serdeScoped;
-
-deprecated("use @serdeRequired instead")
-alias serializationRequired = serdeRequired;

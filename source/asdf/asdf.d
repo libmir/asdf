@@ -29,48 +29,63 @@ else
 version(X86)
     version = X86_Any;
 
-///
-class AsdfException: Exception
+version (D_Exceptions)
 {
-    /// zero based faulty location
-    size_t location;
-
-    ///
-    this(
-        string msg,
-        size_t location,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        ) pure nothrow @nogc @safe 
+    /++
+    Serde Exception
+    +/
+    class AsdfSerdeException : SerdeException
     {
-        this.location = location;
-        super(msg, file, line);
-    }
+        /// zero based faulty location
+        size_t location;
 
-    ///
-    this(
-        string msg,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        Throwable next = null) pure nothrow @nogc @safe 
-    {
-        super(msg, file, line, next);
-    }
+        ///
+        this(
+            string msg,
+            size_t location,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            ) pure nothrow @nogc @safe 
+        {
+            this.location = location;
+            super(msg, file, line);
+        }
 
-    ///
-    this(
-        string msg,
-        Throwable next,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        ) pure nothrow @nogc @safe 
-    {
-        this(msg, file, line, next);
+        ///
+        this(
+            string msg,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            Throwable next = null) pure nothrow @nogc @safe 
+        {
+            super(msg, file, line, next);
+        }
+
+        ///
+        this(
+            string msg,
+            Throwable next,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            ) pure nothrow @nogc @safe 
+        {
+            this(msg, file, line, next);
+        }
+
+        SerdeException toMutable() @trusted pure nothrow @nogc const
+        {
+            return cast() this;
+        }
+
+        alias toMutable this;
     }
 }
 
+deprecated("use mir.serde: SerdeException instead")
+alias AsdfException = SerdeException;
+
 ///
-class InvalidAsdfException: AsdfException
+class InvalidAsdfException: SerdeException
 {
     ///
     this(
@@ -106,7 +121,7 @@ private void enforceValidAsdf(
 }
 
 ///
-class EmptyAsdfException: AsdfException
+class EmptyAsdfException: SerdeException
 {
     ///
     this(
@@ -136,10 +151,13 @@ struct Asdf
     }
 
     /// Returns ASDF Kind
-    ubyte kind() const pure @safe
+    ubyte kind() const pure @safe @nogc
     {
         if (!data.length)
-            throw new EmptyAsdfException;
+        {
+            static immutable exc = new EmptyAsdfException;
+            throw exc;
+        }
         return data[0];
     }
 
@@ -212,7 +230,10 @@ struct Asdf
     private void toStringImpl(Dg)(ref JsonBuffer!Dg sink) const
     {
         if (!data.length)
-            throw new EmptyAsdfException("Data buffer is empty");
+        {
+            static immutable exc = new EmptyAsdfException("Data buffer is empty");
+            throw exc;
+        }
         auto t = data[0];
         switch(t)
         {
