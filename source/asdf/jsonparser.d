@@ -115,6 +115,7 @@ Asdf parseJson(
 /// Faulty location
 pure unittest
 {
+    import asdf;
     try
     {
         auto data = `[1, 2, ]`.parseJson;
