@@ -112,18 +112,18 @@ Asdf parseJson(
     assert(json["ak", "sub"] == "subval");
 }
 
-/// fetch error position
+/// Faulty location
 pure unittest
 {
     try
     {
-        auto asdf = `[1, 2, ]`.parseJson;
+        auto data = `[1, 2, ]`.parseJson;
     }
     catch(AsdfException e)
     {
         import std.conv;
         /// zero based index
-        assert(e.position == 7);
+        assert(e.location == 7);
         return;
     }
     assert(0);
@@ -149,9 +149,9 @@ unittest
 
 
 private Asdf parseJson(Parser)(ref Parser parser) {
-    size_t position;
-    if (parser.parse(position))
-        throw new AsdfException(parser.lastError, position);
+    size_t location;
+    if (parser.parse(location))
+        throw new AsdfException(parser.lastError, location);
     return Asdf(parser.result);
 }
 
@@ -593,12 +593,12 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
 
     AsdfErrorCode parse()
     {
-        size_t position;
-        return parse(position);
+        size_t location;
+        return parse(location);
     }
 
     pragma(inline, false)
-    AsdfErrorCode parse(out size_t position)
+    AsdfErrorCode parse(out size_t location)
     {
         version(SSE42)
         {
@@ -623,7 +623,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 pragma(inline, false);
                 if(strPtr)
                 {
-                    position += front.length;
+                    location += front.length;
                     input.popFront;
                     if (input.empty)
                     {
@@ -1130,7 +1130,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
     }
 
     ret_error:
-        position += strPtr - cast(const(ubyte)*)front.ptr;
+        location += strPtr - cast(const(ubyte)*)front.ptr;
         dataLength = dataPtr - data.ptr;
         stack.free();
         goto ret_final;

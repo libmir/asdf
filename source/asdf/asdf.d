@@ -32,18 +32,18 @@ version(X86)
 ///
 class AsdfException: Exception
 {
-    /// zero based position
-    size_t position;
+    /// zero based faulty location
+    size_t location;
 
     ///
     this(
         string msg,
-        size_t position,
+        size_t location,
         string file = __FILE__,
         size_t line = __LINE__,
         ) pure nothrow @nogc @safe 
     {
-        this.position = position;
+        this.location = location;
         super(msg, file, line);
     }
 
