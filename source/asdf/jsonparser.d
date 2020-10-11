@@ -112,6 +112,23 @@ Asdf parseJson(
     assert(json["ak", "sub"] == "subval");
 }
 
+/// fetch error position
+pure unittest
+{
+    try
+    {
+        auto asdf = `[1, 2, ]`.parseJson;
+    }
+    catch(AsdfException e)
+    {
+        import std.conv;
+        /// zero based index
+        assert(e.position == 7);
+        return;
+    }
+    assert(0);
+}
+
 /// ditto
 Asdf parseJson(
     Flag!"includingNewLine" includingNewLine = Yes.includingNewLine,
@@ -132,8 +149,9 @@ unittest
 
 
 private Asdf parseJson(Parser)(ref Parser parser) {
-    if (parser.parse)
-        throw new AsdfException(parser.lastError);
+    size_t position;
+    if (parser.parse(position))
+        throw new AsdfException(parser.lastError, position);
     return Asdf(parser.result);
 }
 
@@ -572,8 +590,15 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         return _lastError;
     }
 
-    pragma(inline, false)
+
     AsdfErrorCode parse()
+    {
+        size_t position;
+        return parse(position);
+    }
+
+    pragma(inline, false)
+    AsdfErrorCode parse(out size_t position)
     {
         version(SSE42)
         {
@@ -598,6 +623,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                 pragma(inline, false);
                 if(strPtr)
                 {
+                    position += front.length;
                     input.popFront;
                     if (input.empty)
                     {
@@ -1104,6 +1130,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
     }
 
     ret_error:
+        position += strPtr - cast(const(ubyte)*)front.ptr;
         dataLength = dataPtr - data.ptr;
         stack.free();
         goto ret_final;

@@ -13,6 +13,7 @@ dub.selections.json
 1461741434.1461741945.100000.jsonl
 
 libasdf.a
+builddir
 
 example/filter_and_arrays/filter_and_arrays
 
