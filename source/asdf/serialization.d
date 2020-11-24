@@ -1808,10 +1808,14 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
     }
     else
     {
-        const(char)[] s;
-        data.deserializeValue(s);
+        string s;
+        data.deserializeScopedString(s);
+        import mir.ndslice.fuse: fuse;
+        import mir.array.allocation: array;
+        import mir.ndslice.topology: map;
+        static immutable allowedKeys = [EnumMembers!V].map!serdeGetKeysIn.array;
         if (!serdeParseEnum(s, value))
-            throw new Exception("Unable to deserialize string '" ~ s.idup ~ "' to " ~ V.stringof);
+            throw new Exception("Unable to deserialize string '" ~ s ~ "' to " ~ V.stringof ~ "Allowed keys:" ~ allowedKeys.stringof);
     }
     return null;
 }
