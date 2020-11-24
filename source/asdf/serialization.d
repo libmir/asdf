@@ -1502,6 +1502,7 @@ unittest
 void serializeValue(S, V)(ref S serializer, auto ref V value)
     if(!isNullable!V && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
 {
+    import mir.algebraic : Algebraic;
     static if(is(V == class) || is(V == interface))
     {
         if(value is null)
@@ -1516,6 +1517,12 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         serializer.serializeValue(value.to!(serdeGetProxy!V));
         return;
     }}
+    else
+    static if (is(Unqual!V == Algebraic!(setId, TypeSets), uint setId, TypeSets...))
+    {
+        import mir.algebraic: visit;
+        value.visit!((auto ref v) => serializeValue(serializer, v));
+    }
     else
     static if(__traits(hasMember, V, "serialize"))
     {
@@ -1647,6 +1654,17 @@ unittest
     enum json = `{"foo":"bar"}`;
     assert(serializeToJson(S()) == json);
     assert(serializeToAsdf(S()).to!string == json);
+}
+
+/// mir.algebraic support
+unittest
+{
+    import mir.algebraic: Variant, Nullable, This;
+    alias V = Nullable!(double, string, This[], This[]);
+    V v;
+    assert(v.serializeToJson == "null");
+    v = [V(2), V("str")];
+    assert(v.serializeToJson == `[2,"str"]`);
 }
 
 
