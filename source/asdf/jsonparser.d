@@ -120,7 +120,7 @@ pure unittest
     {
         auto data = `[1, 2, ]`.parseJson;
     }
-    catch(AsdfException e)
+    catch(AsdfSerdeException e)
     {
         import std.conv;
         /// zero based index

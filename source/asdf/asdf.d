@@ -73,7 +73,7 @@ version (D_Exceptions)
             this(msg, file, line, next);
         }
 
-        SerdeException toMutable() @trusted pure nothrow @nogc const
+        override AsdfSerdeException toMutable() @trusted pure nothrow @nogc const
         {
             return cast() this;
         }
