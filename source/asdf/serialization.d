@@ -1973,39 +1973,6 @@ unittest
     assert(deserialize!(int[])(serializeToAsdf([1, 3, 4])) == [1, 3, 4]);
 }
 
-///
-unittest
-{
-    import asdf;
-
-    static struct Foo
-    {
-        int i;
-
-        @disable
-        this();
-
-        this(int i)
-        {
-            this.i = i;
-        }
-
-        SerdeException deserializeFromAsdf()(Asdf data)
-        {
-            string val;
-            if (auto exc = deserializeScopedString(data, val))
-                return exc;
-            this = DateTimeProxy(DateTime.fromISOString(val));
-            return null;
-        }
-    }
-
-    // assert(deserialize!(Foo[])(serializeToJson(null)) is null);
-    // assert(deserialize!(Foo[])(serializeToAsdf(null)) is null);
-    // assert(deserialize!(Foo[])(serializeToJson([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
-    // assert(deserialize!(Foo[])(serializeToAsdf([Foo(1), Foo(3), Foo(4)])) == [Foo(1), Foo(3), Foo(4)]);
-}
-
 /// Deserialize static array
 SerdeException deserializeValue(V : T[N], T, size_t N)(Asdf data, ref V value)
 {
