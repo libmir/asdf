@@ -29,48 +29,64 @@ else
 version(X86)
     version = X86_Any;
 
-///
-class AsdfException: Exception
+version (D_Exceptions)
 {
-    /// zero based faulty location
-    size_t location;
-
-    ///
-    this(
-        string msg,
-        size_t location,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        ) pure nothrow @nogc @safe 
+    import mir.serde: SerdeException;
+    /++
+    Serde Exception
+    +/
+    class AsdfSerdeException : SerdeException
     {
-        this.location = location;
-        super(msg, file, line);
-    }
+        /// zero based faulty location
+        size_t location;
 
-    ///
-    this(
-        string msg,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        Throwable next = null) pure nothrow @nogc @safe 
-    {
-        super(msg, file, line, next);
-    }
+        ///
+        this(
+            string msg,
+            size_t location,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            ) pure nothrow @nogc @safe 
+        {
+            this.location = location;
+            super(msg, file, line);
+        }
 
-    ///
-    this(
-        string msg,
-        Throwable next,
-        string file = __FILE__,
-        size_t line = __LINE__,
-        ) pure nothrow @nogc @safe 
-    {
-        this(msg, file, line, next);
+        ///
+        this(
+            string msg,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            Throwable next = null) pure nothrow @nogc @safe 
+        {
+            super(msg, file, line, next);
+        }
+
+        ///
+        this(
+            string msg,
+            Throwable next,
+            string file = __FILE__,
+            size_t line = __LINE__,
+            ) pure nothrow @nogc @safe 
+        {
+            this(msg, file, line, next);
+        }
+
+        override AsdfSerdeException toMutable() @trusted pure nothrow @nogc const
+        {
+            return cast() this;
+        }
+
+        alias toMutable this;
     }
 }
 
+deprecated("use mir.serde: SerdeException instead")
+alias AsdfException = SerdeException;
+
 ///
-class InvalidAsdfException: AsdfException
+class InvalidAsdfException: SerdeException
 {
     ///
     this(
@@ -79,7 +95,7 @@ class InvalidAsdfException: AsdfException
         size_t line = __LINE__,
         Throwable next = null) pure nothrow @safe 
     {
-        import std.conv: text;
+        import mir.format: text;
         super(text("ASDF values is invalid for kind = ", kind), file, line, next);
     }
 
@@ -106,7 +122,7 @@ private void enforceValidAsdf(
 }
 
 ///
-class EmptyAsdfException: AsdfException
+class EmptyAsdfException: SerdeException
 {
     ///
     this(
@@ -136,10 +152,13 @@ struct Asdf
     }
 
     /// Returns ASDF Kind
-    ubyte kind() const pure @safe
+    ubyte kind() const pure @safe @nogc
     {
         if (!data.length)
-            throw new EmptyAsdfException;
+        {
+            static immutable exc = new EmptyAsdfException;
+            throw exc;
+        }
         return data[0];
     }
 
@@ -173,7 +192,7 @@ struct Asdf
     // \uXXXX character support
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         assert(Asdf("begin\u000bend").to!string == `"begin\u000Bend"`);
         assert("begin\u000bend" == cast(string) `"begin\u000Bend"`.parseJson, to!string(cast(ubyte[]) cast(string)( `"begin\u000Bend"`.parseJson)));
@@ -189,7 +208,7 @@ struct Asdf
     ///
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         auto asdfData = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`.parseJson;
         asdfData["inner", "d"].remove;
@@ -212,7 +231,10 @@ struct Asdf
     private void toStringImpl(Dg)(ref JsonBuffer!Dg sink) const
     {
         if (!data.length)
-            throw new EmptyAsdfException("Data buffer is empty");
+        {
+            static immutable exc = new EmptyAsdfException("Data buffer is empty");
+            throw exc;
+        }
         auto t = data[0];
         switch(t)
         {
@@ -287,7 +309,7 @@ struct Asdf
     ///
     unittest
     {
-        import std.conv: to;
+        import mir.conv: to;
         import asdf.jsonparser;
         auto text = `{"foo":"bar","inner":{"a":true,"b":false,"c":"32323","d":null,"e":{}}}`;
         const asdfData = text.parseJson;
@@ -650,7 +672,8 @@ struct Asdf
     {
         import std.datetime: SysTime, DateTime, usecs, UTC;
         import std.traits: isNumeric;
-        import std.conv: to, ConvException;
+        import mir.conv: to;
+        import std.conv: ConvException;
         import std.format: format;
         import std.math: trunc;
         import asdf.serialization;

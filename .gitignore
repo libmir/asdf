@@ -14,7 +14,6 @@ dub.selections.json
 
 libasdf.a
 builddir
-
 example/filter_and_arrays/filter_and_arrays
 
 examples/filter_and_arrays/filter_and_arrays
