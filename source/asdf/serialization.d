@@ -1656,7 +1656,7 @@ unittest
     assert(serializeToAsdf(S()).to!string == json);
 }
 
-/// mir.algebraic support
+/// $(GMREF mir-core, mir, algebraic) support.
 unittest
 {
     import mir.algebraic: Variant, Nullable, This;
@@ -1667,6 +1667,82 @@ unittest
     assert(v.serializeToJson == `[2,"str"]`);
 }
 
+/// $(GMREF mir-core, mir, algebraic) with manual serialization.
+unittest
+{
+    static struct Response
+    {
+        import mir.algebraic: TaggedVariant;
+
+        alias Union = TaggedVariant!(
+            ["double_", "string", "array", "table"],
+            double,
+            string,
+            Response[],
+            Response[string],
+        );
+
+        Union data;
+        alias Tag = Union.Kind;
+        // propogates opEquals, opAssign, and other primitives
+        alias data this;
+
+        static foreach (T; Union.AllowedTypes)
+            this(T v) @safe pure nothrow @nogc { data = v; }
+
+        void serialize(S)(ref S serializer) // pure // const
+        {
+            import asdf: serializeValue;
+            import mir.algebraic: visit;
+
+            auto o = serializer.objectBegin();
+            serializer.putKey("tag");
+            serializer.serializeValue(kind);
+            serializer.putKey("data");
+            data.visit!(
+                (ref double v) => serializer.serializeValue(v), // specialization for double if required
+                (ref v) => serializer.serializeValue(v),
+            );
+            serializer.objectEnd(o);
+        }
+
+        SerdeException deserializeFromAsdf(Asdf asdfData)
+        {
+            import asdf : deserializeValue;
+            import std.traits : EnumMembers;
+
+            Tag tag;
+            if (auto e = asdfData["tag"].deserializeValue(tag))
+                return e;
+            final switch (tag)
+            {
+                foreach (m; EnumMembers!Tag)
+                {
+                    case m: {
+                        alias T = Union.AllowedTypes[m];
+                        data = T.init;
+                        if (auto e = asdfData["data"].deserializeValue(data.trustedGet!T))
+                            return e;
+                        break;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    Response v = 3.0;
+    assert(v.kind == Response.Tag.double_);
+    v = "str";
+    assert(v == "str");
+
+    import asdf;
+    assert(v.serializeToJson == `{"tag":"string","data":"str"}`);
+    v = Response.init;
+    v = `{"tag":"array","data":[{"tag":"string","data":"S"}]}`.deserialize!Response;
+    assert(v.kind == Response.Tag.array);
+    assert(v.get!(Response[])[0] == "S");
+}
 
 /// Deserialize `null` value
 SerdeException deserializeValue(T : typeof(null))(Asdf data, T)
