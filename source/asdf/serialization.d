@@ -1690,7 +1690,7 @@ unittest
         static foreach (T; Union.AllowedTypes)
             this(T v) @safe pure nothrow @nogc { data = v; }
 
-        void serialize(S)(ref S serializer) // pure // const
+        void serialize(S)(ref S serializer) const
         {
             import asdf: serializeValue;
             import mir.algebraic: visit;
@@ -1700,8 +1700,9 @@ unittest
             serializer.serializeValue(kind);
             serializer.putKey("data");
             data.visit!(
-                (ref double v) => serializer.serializeValue(v), // specialization for double if required
-                (ref v) => serializer.serializeValue(v),
+                (double v) => serializer.serializeValue(v), // specialization for double if required
+                (const Response[string] v) => serializer.serializeValue(cast(const(Response)[string])v),
+                (v) => serializer.serializeValue(v),
             );
             serializer.objectEnd(o);
         }
