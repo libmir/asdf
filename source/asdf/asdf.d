@@ -140,6 +140,7 @@ The structure for ASDF manipulation.
 +/
 struct Asdf
 {
+    ///
     enum Kind : ubyte
     {
         null_  = 0x00,
