@@ -1518,7 +1518,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         return;
     }}
     else
-    static if (is(Unqual!V == Algebraic!(setId, TypeSets), uint setId, TypeSets...))
+    static if (is(Unqual!V == Algebraic!TypeSet, TypeSet...))
     {
         import mir.algebraic: visit;
         value.visit!((auto ref v) => serializeValue(serializer, v));
@@ -1662,7 +1662,7 @@ unittest
     import mir.algebraic: Variant, Nullable, This;
     alias V = Nullable!(double, string, This[], This[]);
     V v;
-    assert(v.serializeToJson == "null");
+    assert(v.serializeToJson == "null", v.serializeToJson);
     v = [V(2), V("str")];
     assert(v.serializeToJson == `[2,"str"]`);
 }
