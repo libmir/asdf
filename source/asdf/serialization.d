@@ -1670,6 +1670,8 @@ unittest
 /// $(GMREF mir-core, mir, algebraic) with manual serialization.
 unittest
 {
+    import asdf.asdf;
+
     static struct Response
     {
         import mir.algebraic: TaggedVariant;

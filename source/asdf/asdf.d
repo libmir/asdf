@@ -143,12 +143,19 @@ struct Asdf
     ///
     enum Kind : ubyte
     {
+        ///
         null_  = 0x00,
+        ///
         true_  = 0x01,
+        ///
         false_ = 0x02,
+        ///
         number = 0x03,
+        ///
         string = 0x05,
+        ///
         array  = 0x09,
+        ///
         object = 0x0A,
     }
 
