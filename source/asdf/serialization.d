@@ -88,14 +88,14 @@ unittest
         string bar;
     }
 
-    enum json = `{"time":"20160304T000000","object":{"foo":14},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+    enum json = `{"time":"20160304T000000","object":{"foo":1.4e1},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
     auto value = S(
         DateTime(2016, 3, 4),
         new C,
         [E.a : "A"],
         "escaped chars = '\\', '\"', '\t', '\r', '\n'");
     assert(serializeToJson(cast(const)value) == json, serializeToJson(cast(const)value)); // check serialization of const data
-    assert(serializeToAsdf(value).to!string == json);
+    assert(serializeToAsdf(value).to!string == json, serializeToAsdf(value).to!string);
     assert(deserialize!S(json).serializeToJson == json);
 }
 
@@ -595,10 +595,10 @@ unittest
         Decor dec = Decor(20); // { 20, inf }
     }
     
-    assert(Cake("Normal Cake").serializeToJson == `{"name":"Normal Cake","slices":8,"flavor":1}`);
+    assert(Cake("Normal Cake").serializeToJson == `{"name":"Normal Cake","slices":8,"flavor":1e0}`);
     auto cake = Cake.init;
     cake.dec = Decor.init;
-    assert(cake.serializeToJson == `{"slices":8,"flavor":1,"dec":{"candles":0,"fluff":"inf"}}`);
+    assert(cake.serializeToJson == `{"slices":8,"flavor":1e0,"dec":{"candles":0,"fluff":"inf"}}`);
     assert(cake.dec.serializeToJson == `{"candles":0,"fluff":"inf"}`);
     
     static struct A
@@ -938,6 +938,24 @@ struct JsonSerializer(string sep, Dg)
     void putNumberValue(Num)(Num num, FormatSpec!char fmt = FormatSpec!char.init)
     {
         auto f = &sink.putSmallEscaped;
+        static if (isNumeric!Num)
+        {
+            static struct S
+            {
+                typeof(f) fun;
+                auto put(scope const(char)[] str)
+                {
+                    fun(str);
+                }
+            }
+            auto app = S(f);
+            if (fmt == FormatSpec!char.init)
+            {
+                import mir.format: print;
+                print(app, num);
+                return;
+            }
+        }
         assumePure((typeof(f) fun) => formatValue(fun, num, fmt))(f);
     }
 
@@ -1126,6 +1144,16 @@ pure:
     {
         app.put1(Asdf.Kind.number);
         auto sh = app.skip(1);
+        static if (isNumeric!Num)
+        {
+            if (fmt == FormatSpec!char.init)
+            {
+                import mir.format: print;
+                print(app, num);
+                app.put1(cast(ubyte)(app.shift - sh - 1), sh);
+                return;
+            }
+        }
         assumePure((ref OutputArray app) => formatValue(app, num, fmt))(app);
         app.put1(cast(ubyte)(app.shift - sh - 1), sh);
     }
@@ -1247,7 +1275,7 @@ unittest
     import std.bigint;
 
     assert(serializeToJson(BigInt(123)) == `123`);
-    assert(serializeToJson(2.40f) == `2.4`);
+    assert(serializeToJson(2.40f) == `2.4e0`);
     assert(serializeToJson(float.nan) == `"nan"`);
     assert(serializeToJson(float.infinity) == `"inf"`);
     assert(serializeToJson(-float.infinity) == `"-inf"`);
@@ -1495,7 +1523,7 @@ unittest
     assert(t.serializeToJson == `{"str":null,"nested":null}`);
     t.str = "txt";
     t.nested = Nested(123);
-    assert(t.serializeToJson == `{"str":"txt","nested":{"f":123}}`);
+    assert(t.serializeToJson == `{"str":"txt","nested":{"f":1.23e2}}`);
 }
 
 /// Struct and class type serialization
@@ -1664,7 +1692,7 @@ unittest
     V v;
     assert(v.serializeToJson == "null", v.serializeToJson);
     v = [V(2), V("str")];
-    assert(v.serializeToJson == `[2,"str"]`);
+    assert(v.serializeToJson == `[2e0,"str"]`);
 }
 
 /// $(GMREF mir-core, mir, algebraic) with manual serialization.
