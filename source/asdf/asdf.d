@@ -855,8 +855,8 @@ struct Asdf
         import std.datetime;
         import asdf.serialization;
 
-        auto num =  serializeToAsdf(0.123456789); // rounding up to usecs
+        auto num = serializeToAsdf(0.123456789); // rounding up to usecs
         assert(cast(DateTime) num == DateTime(1970, 1, 1));
-        assert(cast(SysTime) num == SysTime(DateTime(1970, 1, 1), usecs(123457), UTC())); // UTC time zone is used.
+        assert(cast(SysTime) num == SysTime(DateTime(1970, 1, 1), usecs(123456), UTC())); // UTC time zone is used.
     }
 }
