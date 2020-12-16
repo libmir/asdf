@@ -88,7 +88,7 @@ unittest
         string bar;
     }
 
-    enum json = `{"time":"20160304T000000","object":{"foo":1.4e1},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+    enum json = `{"time":"20160304T000000","object":{"foo":14.0},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
     auto value = S(
         DateTime(2016, 3, 4),
         new C,
@@ -595,10 +595,10 @@ unittest
         Decor dec = Decor(20); // { 20, inf }
     }
     
-    assert(Cake("Normal Cake").serializeToJson == `{"name":"Normal Cake","slices":8,"flavor":1e0}`);
+    assert(Cake("Normal Cake").serializeToJson == `{"name":"Normal Cake","slices":8,"flavor":1.0}`);
     auto cake = Cake.init;
     cake.dec = Decor.init;
-    assert(cake.serializeToJson == `{"slices":8,"flavor":1e0,"dec":{"candles":0,"fluff":"inf"}}`);
+    assert(cake.serializeToJson == `{"slices":8,"flavor":1.0,"dec":{"candles":0,"fluff":"inf"}}`);
     assert(cake.dec.serializeToJson == `{"candles":0,"fluff":"inf"}`);
     
     static struct A
@@ -1275,7 +1275,7 @@ unittest
     import std.bigint;
 
     assert(serializeToJson(BigInt(123)) == `123`);
-    assert(serializeToJson(2.40f) == `2.4e0`);
+    assert(serializeToJson(2.40f) == `2.4`);
     assert(serializeToJson(float.nan) == `"nan"`);
     assert(serializeToJson(float.infinity) == `"inf"`);
     assert(serializeToJson(-float.infinity) == `"-inf"`);
@@ -1523,7 +1523,7 @@ unittest
     assert(t.serializeToJson == `{"str":null,"nested":null}`);
     t.str = "txt";
     t.nested = Nested(123);
-    assert(t.serializeToJson == `{"str":"txt","nested":{"f":1.23e2}}`);
+    assert(t.serializeToJson == `{"str":"txt","nested":{"f":123.0}}`);
 }
 
 /// Struct and class type serialization
@@ -1692,7 +1692,7 @@ unittest
     V v;
     assert(v.serializeToJson == "null", v.serializeToJson);
     v = [V(2), V("str")];
-    assert(v.serializeToJson == `[2e0,"str"]`);
+    assert(v.serializeToJson == `[2.0,"str"]`);
 }
 
 /// $(GMREF mir-core, mir, algebraic) with manual serialization.
