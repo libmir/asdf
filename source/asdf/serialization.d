@@ -1522,6 +1522,16 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         value.serialize(serializer);
     }
     else
+    static if(__traits(hasMember, V, "toString"))
+    {
+        serializer.putValue(value.toString);
+    }
+    else
+    static if(__traits(hasMember, V, "getRawValue"))
+    {
+        serializer.putValue(value.getRawValue);
+    }
+    else
     {
         auto state = serializer.objectBegin();
         foreach(member; aliasSeqOf!(SerializableMembers!V))
