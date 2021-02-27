@@ -263,6 +263,18 @@ unittest
     assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
 }
 
+
+unittest
+{
+    Asdf[string] map;
+
+    map["num"] = serializeToAsdf(124);
+    map["str"] = serializeToAsdf("value");
+    
+    import std.stdio;
+    map.serializeToJson.writeln();
+}
+
 /// Support for floating point nan and (partial) infinity
 unittest
 {
@@ -1688,11 +1700,11 @@ unittest
 unittest
 {
     import mir.algebraic: Variant, Nullable, This;
-    alias V = Nullable!(double, string, This[], This[]);
+    alias V = Nullable!(double, string, This[], This[string]);
     V v;
     assert(v.serializeToJson == "null", v.serializeToJson);
-    v = [V(2), V("str")];
-    assert(v.serializeToJson == `[2.0,"str"]`);
+    v = [V(2), V("str"), V(["key":V(1.0)])];
+    assert(v.serializeToJson == `[2.0,"str",{"key":1.0}]`);
 }
 
 /// $(GMREF mir-core, mir, algebraic) with manual serialization.
