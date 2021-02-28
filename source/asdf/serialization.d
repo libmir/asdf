@@ -66,7 +66,7 @@ unittest
             return null;
         }
 
-        void serialize(S)(ref S serializer) pure
+        void serialize(S)(ref S serializer) const pure
         {
             serializer.putValue(datetime.toISOString);
         }
@@ -264,16 +264,16 @@ unittest
 }
 
 
-unittest
-{
-    Asdf[string] map;
+// unittest
+// {
+//     Asdf[string] map;
 
-    map["num"] = serializeToAsdf(124);
-    map["str"] = serializeToAsdf("value");
+//     map["num"] = serializeToAsdf(124);
+//     map["str"] = serializeToAsdf("value");
     
-    import std.stdio;
-    map.serializeToJson.writeln();
-}
+//     import std.stdio;
+//     map.serializeToJson.writeln();
+// }
 
 /// Support for floating point nan and (partial) infinity
 unittest
@@ -702,6 +702,80 @@ unittest
                 == UUID("8AB3060E-2cba-4f23-b74c-b52db3bdfb46"));
 }
 
+/// Proxy type for array of algebraics
+unittest
+{
+    import mir.algebraic: Variant;
+
+    static struct ObjectA
+    {
+        string name;
+    }
+    static struct ObjectB
+    {
+        double value;
+    }
+
+    alias MyObject = Variant!(ObjectA, ObjectB);
+
+    static struct MyObjectArrayProxy
+    {
+        MyObject[] array;
+
+        this(MyObject[] array) @safe pure nothrow @nogc
+        {
+            this.array = array;
+        }
+
+        T opCast(T : MyObject[])()
+        {
+            return array;
+        }
+
+        void serialize(S)(ref S serializer) const
+        {
+            auto state = serializer.arrayBegin;
+            foreach (ref e; array)
+            {
+                serializer.elemBegin();
+                // mir.algebraic has builtin support for serialization.
+                // For other algebraic libraies one can use thier visitor handlers.
+                serializeValue(serializer, e);
+            }
+            serializer.arrayEnd(state);
+        }
+
+        auto deserializeFromAsdf(Asdf asdfData)
+        {
+            import asdf : deserializeValue;
+            import std.traits : EnumMembers;
+
+            foreach (e; asdfData.byElement)
+            {
+                if (e["name"] != Asdf.init)
+                {
+                    array ~= MyObject(deserialize!ObjectA(e));
+                }
+                else
+                {
+                    array ~= MyObject(deserialize!ObjectB(e));
+                }
+            }
+
+            return SerdeException.init;
+        }
+    }
+
+    static struct SomeObject
+    {
+        @serdeProxy!MyObjectArrayProxy MyObject[] objects;
+    }
+
+    string data = q{{"objects":[{"name":"test"},{"value":1.5}]}};
+
+    auto value = data.deserialize!SomeObject;
+    assert (value.serializeToJson == data);
+}
 
 ///
 unittest
@@ -1683,7 +1757,7 @@ unittest
 
     struct S
     {
-        void serialize(S)(ref S serializer)
+        void serialize(S)(ref S serializer) const
         {
             auto state = serializer.objectBegin;
             serializer.putEscapedKey("foo");
