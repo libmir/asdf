@@ -518,7 +518,7 @@ version(unittest) private
 
     unittest
     {
-        assert(serializeToJson(E.bar) == `"BAR"`, serializeToJson(E.bar));
+        assert(serializeToJson(E.bar) == `"BAR"`);
         assert(`"N/A"`.deserialize!E == E.none);
         assert(`"NA"`.deserialize!E == E.none);
     }
