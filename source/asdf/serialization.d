@@ -705,6 +705,7 @@ unittest
 /// Proxy type for array of algebraics
 unittest
 {
+    import asdf;
     import mir.algebraic: Variant;
 
     static struct ObjectA
