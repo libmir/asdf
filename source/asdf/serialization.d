@@ -1617,6 +1617,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     if(!isNullable!V && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
 {
     import mir.algebraic : Algebraic;
+    import mir.string_map : isStringMap;
     static if(is(V == class) || is(V == interface))
     {
         if(value is null)
@@ -1635,7 +1636,24 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     static if (is(Unqual!V == Algebraic!TypeSet, TypeSet...))
     {
         import mir.algebraic: visit;
-        value.visit!((auto ref v) => serializeValue(serializer, v));
+        value.visit!((auto ref v) => .serializeValue(serializer, v));
+    }
+    else
+    static if (isStringMap!V)
+    {
+        if(value == value.init)
+        {
+            serializer.putValue(null);
+            return;
+        }
+        auto valState = serializer.objectBegin();
+        foreach (i, key; value.keys)
+        {
+            serializer.putKey(key);
+            serializer.serializeValue(value.values[i]);
+        }
+        serializer.objectEnd(valState);
+        return;
     }
     else
     static if(__traits(hasMember, V, "serialize"))
@@ -2433,6 +2451,155 @@ struct Impl
 SerdeException deserializeValue(V)(Asdf data, ref V value)
     if(isAggregateType!V)
 {
+    import mir.algebraic;
+    import mir.string_map;
+    static if (is(V == StringMap!T, T))
+    {
+        auto kind = data.kind;
+        with(Asdf.Kind) switch(kind)
+        {
+            case object:
+                foreach(elem; data.byKeyValue)
+                {
+                    T v;
+                    if (auto exc = .deserializeValue(elem.value, v))
+                        return exc;
+                    value[elem.key.idup] = v;
+                }
+                return null;
+            case null_:
+                value = null;
+                return null;
+            default:
+                return unexpectedKind(kind);
+        }
+    }
+    else
+    static if (is(V == Algebraic!TypeSet, TypeSet...))
+    {
+        import std.meta: anySatisfy, Filter;
+        import mir.internal.meta: Contains;
+        alias Types = V.AllowedTypes;
+        alias contains = Contains!Types;
+        switch (data.kind)
+        {
+            static if (contains!(typeof(null)))
+            {
+                case Asdf.Kind.null_:
+                {
+                    value = null;
+                    return null;
+                }
+            }
+
+            static if (contains!bool)
+            {
+                case Asdf.Kind.true_:
+                {
+                    value = true;
+                    return null;
+                }
+                case Asdf.Kind.false_:
+                {
+                    value = false;
+                    return null;
+                }
+            }
+
+            static if (contains!string)
+            {
+                case Asdf.Kind.string:
+                {
+                    string str;
+                    if (auto exc = deserializeValue(data, str))
+                        return exc;
+                    value = str;
+                    return null;
+                }
+            }
+
+            static if (contains!long || contains!double)
+            {
+                case Asdf.Kind.number:
+                {
+                    import mir.bignum.decimal;
+                    DecimalExponentKey key;
+                    Decimal!256 decimal = void;
+                    auto str = (()@trusted => cast(string) data.data[2 .. $])();
+                    if (!decimal.fromStringImpl(str, key))
+                        return new SerdeException("Asdf: can't parse number string: " ~ str);
+                    if (key || !contains!long)
+                    {
+                        static if (contains!double)
+                        {
+                            value = cast(double) decimal;
+                            return null;
+                        }
+                        else
+                        {
+                            return new SerdeException("Asdf: can't parse integer string: " ~ str);
+                        }
+                    }
+                    static if (contains!long)
+                    {
+                        auto bigintView = decimal.coefficient.view;
+                        auto ret = cast(long) bigintView;
+                        if (ret != bigintView) {
+                            return new SerdeException("Asdf: integer overflow");
+                        }
+                        value = ret;
+                    }
+                    return null;
+                }
+            }
+
+            static if (anySatisfy!(templateAnd!(isArray, templateNot!isSomeString), Types))
+            {
+                case Asdf.Kind.array:
+                {
+                    alias ArrayTypes = Filter!(templateAnd!(isArray, templateNot!isSomeString), Types);
+                    static assert(ArrayTypes.length == 1, ArrayTypes.stringof);
+                    ArrayTypes[0] array;
+                    if (auto exc = deserializeValue(data, array))
+                        return exc;
+                    value = array;
+                    return null;
+                }
+            }
+
+            static if (anySatisfy!(isStringMap, Types))
+            {
+                case Asdf.Kind.object:
+                {
+                    alias MapTypes = Filter!(isStringMap, Types);
+                    static assert(MapTypes.length == 1, MapTypes.stringof);
+                    MapTypes[0] object;
+                    if (auto exc = deserializeValue(data, object))
+                        return exc;
+                    value = object;
+                    return null;
+                }
+            }
+            else
+            static if (anySatisfy!(isAssociativeArray, Types))
+            {
+                case Asdf.Kind.object:
+                {
+                    alias AATypes = Filter!(isAssociativeArray, Types);
+                    static assert(AATypes.length == 1, AATypes.stringof);
+                    AATypes[0] object;
+                    if (auto exc = deserializeValue(data, object))
+                        return exc;
+                    value = object;
+                    return null;
+                }
+            }
+
+            default:
+                return unexpectedKind(data.kind);
+        }
+    }
+    else
     static if (is(V == BigInt))
     {
         if (data.kind != Asdf.Kind.number)
@@ -2591,6 +2758,77 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
         }
         return null;
     }
+}
+
+/// StringMap support
+unittest
+{
+    import mir.string_map;
+    auto map = `{"b" : 1.0, "a" : 2}`.deserialize!(StringMap!double);
+    assert(map.keys == ["b", "a"]);
+    assert(map.values == [1.0, 2.0]);
+    assert(map.serializeToJson == `{"b":1.0,"a":2.0}`);
+
+}
+
+/// JsonAlgebraic alias support
+unittest
+{
+    import mir.algebraic_alias.json;
+    auto value = `{"b" : 1.0, "a" : [1, true, false, null, "str"]}`.deserialize!JsonAlgebraic;
+    assert(value.kind == JsonAlgebraic.Kind.object);
+
+    auto object = value.get!(StringMap!JsonAlgebraic);
+    assert(object.keys == ["b", "a"]); // sequental order
+    assert(object["b"].get!double == 1.0);
+    object["b"].get!double += 4;
+
+    auto array = object["a"].get!(JsonAlgebraic[]);
+    assert(array[0].get!long == 1);
+    array[0].get!long += 10;
+    assert(array[1].get!bool == true);
+    assert(array[2].get!bool == false);
+    assert(array[3].isNull);
+    assert(array[3].get!(typeof(null)) is null);
+    assert(array[4].get!string == "str");
+
+    assert(value.serializeToJson == `{"b":5.0,"a":[11,true,false,null,"str"]}`);
+}
+
+/++
+User defined algebraic types deserialization supports any subset of the following types:
+
+$(UL 
+$(LI `typeof(null)`)
+$(LI `bool`)
+$(LI `long`)
+$(LI `double`)
+$(LI `string`)
+$(LI `AnyType[]`)
+$(LI `StringMap!AnyType`)
+$(LI `AnyType[string]`)
+)
+
+A `StringMap` has has priority over builtin associative arrays.
+
+Serializations works with any algebraic types.
+
+See_also: $(GMREF mir-core, mir,algebraic), $(GMREF mir-algorithm, mir,string_map)
++/
+unittest
+{
+    import mir.algebraic: Nullable, This; // Nullable, Variant, or TaggedVariant
+    alias MyJsonAlgebraic = Nullable!(bool, string, double[], This[string]);
+
+    auto value = `{"b" : true, "z" : null, "this" : {"c" : "str", "d" : [1, 2, 3, 4]}}`.deserialize!MyJsonAlgebraic;
+
+    auto object = value.get!(MyJsonAlgebraic[string]);
+    assert(object["b"].get!bool == true);
+    assert(object["z"].isNull);
+
+    object = object["this"].get!(MyJsonAlgebraic[string]);
+    assert(object["c"].get!string == "str");
+    assert(object["d"].get!(double[]) == [1.0, 2, 3, 4]);
 }
 
 ///
