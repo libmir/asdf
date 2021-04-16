@@ -7,16 +7,16 @@ d:
  - dmd
  - ldc
  - dmd-2.094.1
- - ldc-1.24.0
+ - ldc-1.25.1
 env:
  - ARCH="x86_64" CONF="-sse42"
  - ARCH="x86_64" CONF=""
 matrix:
   include:
-    - {os: linux, env: ARCH="AARCH64" CONF="", services: docker}
-    - {os: linux, d: dmd-2.084.0, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
-    - {os: linux, d: ldc-1.14.0, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
-    - {os: linux, d: ldc-1.14.0, env: ARCH="x86" CONF="-sse42", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc, env: ARCH="AARCH64" CONF="", services: docker}
+    - {os: linux, d: dmd-2.094.0, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-1.25.1, env: ARCH="x86" CONF="", addons: {apt: {packages: [[gcc-multilib]]}}}
+    - {os: linux, d: ldc-1.25.1, env: ARCH="x86" CONF="-sse42", addons: {apt: {packages: [[gcc-multilib]]}}}
 branches:
   only:
     - master
