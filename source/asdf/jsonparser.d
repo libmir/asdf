@@ -600,14 +600,14 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
     {
         version(SSE42)
         {
-            enum byte16 str2E = [
+            enum ubyte16 str2E = [
                 '\u0001', '\u001F',
                 '\"', '\"',
                 '\\', '\\',
                 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-            enum byte16 num2E = ['+', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', '\0'];
-            byte16 str2 = str2E;
-            byte16 num2 = num2E;
+            enum ubyte16 num2E = ['+', '-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', '\0'];
+            ubyte16 str2 = str2E;
+            ubyte16 num2 = num2E;
         }
 
         const(ubyte)* strPtr;
@@ -821,7 +821,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                     {
                         while (strEnd >= strPtr + 16)
                         {
-                            byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                            ubyte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
                             size_t ecx = __builtin_ia32_pcmpistri128(num2, str1, 0x10);
                             storeUnaligned!ubyte16(str1, dataPtr);
                             strPtr += ecx;
@@ -998,7 +998,7 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
             {
                 while (strEnd >= strPtr + 16)
                 {
-                    byte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
+                    ubyte16 str1 = loadUnaligned!ubyte16(cast(ubyte*)strPtr);
                     size_t ecx = __builtin_ia32_pcmpistri128(str2, str1, 0x04);
                     storeUnaligned!ubyte16(str1, dataPtr);
                     strPtr += ecx;

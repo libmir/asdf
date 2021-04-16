@@ -84,15 +84,15 @@ package struct JsonBuffer(Dg)
             import asdf.simd;
             import ldc.gccbuiltins_x86;
 
-            enum byte16 str2E = [
+            enum ubyte16 str2E = [
                 '\u0001', '\u001F',
                 '\"', '\"',
                 '\\', '\\',
                 '\u007f', '\u007f',
                 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-            enum byte16 str3E = ['\"', '\\', '\b', '\f', '\n', '\r', '\t', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-            byte16 str2 = str2E;
-            byte16 str3 = str3E;
+            enum ubyte16 str3E = ['\"', '\\', '\b', '\f', '\n', '\r', '\t', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+            ubyte16 str2 = str2E;
+            ubyte16 str3 = str3E;
 
             static immutable emap = ['\"', '\\', 'b', 'f', 'n', 'r', 't'];
 
@@ -103,7 +103,7 @@ package struct JsonBuffer(Dg)
                     flush;
                 }
                 int ecx = void;
-                byte16 str1 = void;
+                ubyte16 str1 = void;
                 if(d.length >= 16)
                 {
                     str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
