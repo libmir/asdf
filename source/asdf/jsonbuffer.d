@@ -84,15 +84,15 @@ package struct JsonBuffer(Dg)
             import asdf.simd;
             import ldc.gccbuiltins_x86;
 
-            enum ubyte16 str2E = [
+            enum byte16 str2E = [
                 '\u0001', '\u001F',
                 '\"', '\"',
                 '\\', '\\',
                 '\u007f', '\u007f',
                 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-            enum ubyte16 str3E = ['\"', '\\', '\b', '\f', '\n', '\r', '\t', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
-            ubyte16 str2 = str2E;
-            ubyte16 str3 = str3E;
+            enum byte16 str3E = ['\"', '\\', '\b', '\f', '\n', '\r', '\t', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'];
+            byte16 str2 = str2E;
+            byte16 str3 = str3E;
 
             static immutable emap = ['\"', '\\', 'b', 'f', 'n', 'r', 't'];
 
@@ -103,11 +103,11 @@ package struct JsonBuffer(Dg)
                     flush;
                 }
                 int ecx = void;
-                ubyte16 str1 = void;
+                byte16 str1 = void;
                 if(d.length >= 16)
                 {
-                    str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
-                    storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+                    str1 = loadUnaligned!byte16(cast(ubyte*) d.ptr);
+                    storeUnaligned!byte16(str1, cast(ubyte*) buffer.ptr + length);
                     auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
                     ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
                     d = d[ecx .. $];
@@ -138,7 +138,7 @@ package struct JsonBuffer(Dg)
                         case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
                         case 0x0  : break;
                     }
-                    storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+                    storeUnaligned!byte16(str1, cast(ubyte*) buffer.ptr + length);
                     auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
                     ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
                     if(!cflag)
