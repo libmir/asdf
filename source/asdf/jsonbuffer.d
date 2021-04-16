@@ -106,8 +106,8 @@ package struct JsonBuffer(Dg)
                 byte16 str1 = void;
                 if(d.length >= 16)
                 {
-                    str1 = loadUnaligned!ubyte16(cast(ubyte*) d.ptr);
-                    storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+                    str1 = loadUnaligned!byte16(cast(ubyte*) d.ptr);
+                    storeUnaligned!byte16(str1, cast(ubyte*) buffer.ptr + length);
                     auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
                     ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
                     d = d[ecx .. $];
@@ -138,7 +138,7 @@ package struct JsonBuffer(Dg)
                         case 0x0+1: str1.array[0x0] = d[0x0]; goto case;
                         case 0x0  : break;
                     }
-                    storeUnaligned!ubyte16(str1, cast(ubyte*) buffer.ptr + length);
+                    storeUnaligned!byte16(str1, cast(ubyte*) buffer.ptr + length);
                     auto cflag = __builtin_ia32_pcmpistric128(str2, str1, 0x04);
                     ecx =        __builtin_ia32_pcmpistri128 (str2, str1, 0x04);
                     if(!cflag)
