@@ -2527,8 +2527,29 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
                     DecimalExponentKey key;
                     Decimal!256 decimal = void;
                     auto str = (()@trusted => cast(string) data.data[2 .. $])();
-                    if (!decimal.fromStringImpl(str, key))
+
+                    enum bool allowSpecialValues = false;
+                    enum bool allowDotOnBounds = false;
+                    enum bool allowDExponent = false;
+                    enum bool allowStartingPlus = false;
+                    enum bool allowUnderscores = false;
+                    enum bool allowLeadingZeros = false;
+                    enum bool allowExponent = true;
+                    enum bool checkEmpty = false;
+
+                    if (!decimal.fromStringImpl!(
+                        char,
+                        allowSpecialValues,
+                        allowDotOnBounds,
+                        allowDExponent,
+                        allowStartingPlus,
+                        allowUnderscores,
+                        allowLeadingZeros,
+                        allowExponent,
+                        checkEmpty,
+                    )(str, key))
                         return new SerdeException("Asdf: can't parse number string: " ~ str);
+
                     if (key || !contains!long)
                     {
                         static if (contains!double)
