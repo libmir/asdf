@@ -160,13 +160,13 @@ pure:
             serializer.app.put(cast(const(char)[])data.data);
             return;
         }
-        auto state = serializer.objectBegin;
+        auto state = serializer.structBegin;
         foreach(key, ref value; children)
         {
             serializer.putKey(key);
             value.serialize(serializer);
         }
-        serializer.objectEnd(state);
+        serializer.structEnd(state);
     }
 
     ///
@@ -287,7 +287,7 @@ pure:
         import std.exception : enforce;
         enforce(!isLeaf);
         enforce(!node.isLeaf);
-        auto state = serializer.objectBegin;
+        auto state = serializer.structBegin;
         foreach(key, ref value; children)
         {
             auto nodePtr = key in node.children;
@@ -299,7 +299,7 @@ pure:
             else
                 serializer.putValue(null);
          }
-        serializer.objectEnd(state);
+        serializer.structEnd(state);
     }
 
     /++
@@ -333,7 +333,7 @@ pure:
         import std.exception : enforce;
         enforce(!isLeaf);
         enforce(!node.isLeaf);
-        auto state = serializer.objectBegin;
+        auto state = serializer.structBegin;
         foreach(key, ref value; node.children)
         {
             auto nodePtr = key in children;
@@ -345,7 +345,7 @@ pure:
             else
                 value.serialize(serializer);
          }
-        serializer.objectEnd(state);
+        serializer.structEnd(state);
     }
 
     /++

@@ -253,31 +253,6 @@ auto parseJsonByLine(
     return ret;
 }
 
-///
-unittest
-{
-    import asdf.jsonparser;
-    import std.range: chunks;
-    auto text = cast(const ubyte[])"\t true \r\r\n false\t";
-    auto values = text.chunks(3).parseJsonByLine;
-    assert(values.front.data == [1]);
-    values.popFront;
-    assert(values.front.data == [2]);
-    values.popFront;
-    assert(values.empty);
-}
-
-///
-unittest
-{
-    string text =  "\t " ~ `{"key": "a"}` ~ "\r\r\n" ~ `{"key2": "b"}`;
-    auto values = text.parseJsonByLine();
-    assert( values.front["key"] == "a");
-    values.popFront;
-    assert( values.front["key2"] == "b");
-    values.popFront;
-}
-
 version(LDC)
 {
     public import ldc.intrinsics: _expect = llvm_expect;

@@ -262,13 +262,13 @@ struct SomeDoublyLinkedList
     //no template but a function this time!
     void serialize(ref AsdfSerializer serializer)
     {
-        auto state = serializer.arrayBegin();
+        auto state = serializer.listBegin();
         foreach (ref elem; myDll)
         {
             serializer.elemBegin;
             serializer.serializeValue(elem);
         }
-        serializer.arrayEnd(state);
+        serializer.listEnd(state);
     }   
 }
 ```

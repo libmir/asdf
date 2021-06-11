@@ -735,7 +735,7 @@ unittest
 
         void serialize(S)(ref S serializer) const
         {
-            auto state = serializer.arrayBegin;
+            auto state = serializer.listBegin;
             foreach (ref e; array)
             {
                 serializer.elemBegin();
@@ -743,7 +743,7 @@ unittest
                 // For other algebraic libraies one can use thier visitor handlers.
                 serializeValue(serializer, e);
             }
-            serializer.arrayEnd(state);
+            serializer.listEnd(state);
         }
 
         auto deserializeFromAsdf(Asdf asdfData)
@@ -926,7 +926,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     /// Serialization primitives
-    uint objectBegin()
+    uint structBegin()
     {
         static if(sep.length)
         {
@@ -941,7 +941,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     ///ditto
-    void objectEnd(uint state)
+    void structEnd(uint state)
     {
         static if(sep.length)
         {
@@ -954,7 +954,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     ///ditto
-    uint arrayBegin()
+    uint listBegin()
     {
         static if(sep.length)
         {
@@ -969,7 +969,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     ///ditto
-    void arrayEnd(uint state)
+    void listEnd(uint state)
     {
         static if(sep.length)
         {
@@ -1091,6 +1091,11 @@ struct JsonSerializer(string sep, Dg)
     {
         sink.flush;
     }
+
+    deprecated("Use structBegin instead") alias objectBegin = structBegin;
+    deprecated("Use structEnd instead") alias objectEnd = structEnd;
+    deprecated("Use listBegin instead") alias arrayBegin = listBegin;
+    deprecated("Use listEnd instead") alias arrayEnd = listEnd;
 }
 
 /++
@@ -1113,13 +1118,13 @@ unittest
 
     auto app = appender!string;
     auto ser = jsonSerializer(&app.put!(const(char)[]));
-    auto state0 = ser.objectBegin;
+    auto state0 = ser.structBegin;
 
         ser.putEscapedKey("null");
         ser.putValue(null);
 
         ser.putEscapedKey("array");
-        auto state1 = ser.arrayBegin();
+        auto state1 = ser.listBegin();
             ser.elemBegin; ser.putValue(null);
             ser.elemBegin; ser.putValue(123);
             ser.elemBegin; ser.putNumberValue(12300000.123, singleSpec("%.10e"));
@@ -1127,9 +1132,9 @@ unittest
             ser.elemBegin; ser.putValue("\r");
             ser.elemBegin; ser.putValue("\n");
             ser.elemBegin; ser.putNumberValue(BigInt("1234567890"));
-        ser.arrayEnd(state1);
+        ser.listEnd(state1);
 
-    ser.objectEnd(state0);
+    ser.structEnd(state0);
     ser.flush;
 
     assert(app.data == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
@@ -1143,13 +1148,13 @@ unittest
 
     auto app = appender!string;
     auto ser = jsonSerializer!"    "(&app.put!(const(char)[]));
-    auto state0 = ser.objectBegin;
+    auto state0 = ser.structBegin;
 
         ser.putEscapedKey("null");
         ser.putValue(null);
 
         ser.putEscapedKey("array");
-        auto state1 = ser.arrayBegin();
+        auto state1 = ser.listBegin();
             ser.elemBegin; ser.putValue(null);
             ser.elemBegin; ser.putValue(123);
             ser.elemBegin; ser.putNumberValue(12300000.123, singleSpec("%.10e"));
@@ -1157,9 +1162,9 @@ unittest
             ser.elemBegin; ser.putValue("\r");
             ser.elemBegin; ser.putValue("\n");
             ser.elemBegin; ser.putNumberValue(BigInt("1234567890"));
-        ser.arrayEnd(state1);
+        ser.listEnd(state1);
 
-    ser.objectEnd(state0);
+    ser.structEnd(state0);
     ser.flush;
 
     assert(app.data ==
@@ -1190,27 +1195,27 @@ struct AsdfSerializer
 pure:
 
     /// Serialization primitives
-    size_t objectBegin()
+    size_t structBegin()
     {
         app.put1(Asdf.Kind.object);
         return app.skip(4);
     }
 
     ///ditto
-    void objectEnd(size_t state)
+    void structEnd(size_t state)
     {
         app.put4(cast(uint)(app.shift - state - 4), state);
     }
 
     ///ditto
-    size_t arrayBegin()
+    size_t listBegin()
     {
         app.put1(Asdf.Kind.array);
         return app.skip(4);
     }
 
     ///ditto
-    void arrayEnd(size_t state)
+    void listEnd(size_t state)
     {
         app.put4(cast(uint)(app.shift - state - 4), state);
     }
@@ -1273,6 +1278,30 @@ pure:
         putNumberValue(num);
     }
 
+    ///
+    void putValue(Num)(const Num value)
+        if (isNumeric!Num && !is(Num == enum))
+    {
+        import mir.format: print;
+        import mir.internal.utility: isFloatingPoint;
+
+        static if (isFloatingPoint!Num)
+        {
+            import mir.math.common: fabs;
+
+            if (value.fabs < value.infinity)
+                print(app, value);
+            else if (value == Num.infinity)
+                app.put(`"+inf"`);
+            else if (value == -Num.infinity)
+                app.put(`"-inf"`);
+            else
+                app.put(`"nan"`);
+        }
+        else
+            print(app, value);
+    }
+
     ///ditto
     static void elemBegin()
     {
@@ -1282,6 +1311,11 @@ pure:
     static void flush()
     {
     }
+
+    deprecated("Use structBegin instead") alias objectBegin = structBegin;
+    deprecated("Use structEnd instead") alias objectEnd = structEnd;
+    deprecated("Use listBegin instead") alias arrayBegin = listBegin;
+    deprecated("Use listEnd instead") alias arrayEnd = listEnd;
 }
 
 /// Create ASDF serialization back-end
@@ -1300,13 +1334,13 @@ unittest
     import std.format: singleSpec;
 
     auto ser = asdfSerializer();
-    auto state0 = ser.objectBegin;
+    auto state0 = ser.structBegin;
 
         ser.putEscapedKey("null");
         ser.putValue(null);
 
         ser.putKey("array");
-        auto state1 = ser.arrayBegin();
+        auto state1 = ser.listBegin();
             ser.elemBegin; ser.putValue(null);
             ser.elemBegin; ser.putValue(123);
             ser.elemBegin; ser.putNumberValue(12300000.123, singleSpec("%.10e"));
@@ -1314,9 +1348,9 @@ unittest
             ser.elemBegin; ser.putValue("\r");
             ser.elemBegin; ser.putValue("\n");
             ser.elemBegin; ser.putNumberValue(BigInt("1234567890"));
-        ser.arrayEnd(state1);
+        ser.listEnd(state1);
 
-    ser.objectEnd(state0);
+    ser.structEnd(state0);
 
     assert(ser.app.result.to!string == `{"null":null,"array":[null,123,1.2300000123e+07,"\t","\r","\n",1234567890]}`);
 }
@@ -1436,13 +1470,13 @@ void serializeValue(S, T)(ref S serializer, T[] value)
         serializer.putValue(null);
         return;
     }
-    auto state = serializer.arrayBegin();
+    auto state = serializer.listBegin();
     foreach (ref elem; value)
     {
         serializer.elemBegin;
         serializer.serializeValue(elem);
     }
-    serializer.arrayEnd(state);
+    serializer.listEnd(state);
 }
 
 /// Input range serialization
@@ -1452,13 +1486,13 @@ void serializeValue(S, R)(ref S serializer, R value)
         !isDynamicArray!R &&
         !isNullable!R)
 {
-    auto state = serializer.arrayBegin();
+    auto state = serializer.listBegin();
     foreach (ref elem; value)
     {
         serializer.elemBegin;
         serializer.serializeValue(elem);
     }
-    serializer.arrayEnd(state);
+    serializer.listEnd(state);
 }
 
 /// input range serialization
@@ -1498,13 +1532,13 @@ void serializeValue(S, T)(ref S serializer, auto ref T[string] value)
         serializer.putValue(null);
         return;
     }
-    auto state = serializer.objectBegin();
+    auto state = serializer.structBegin();
     foreach (key, ref val; value)
     {
         serializer.putKey(key);
         serializer.serializeValue(val);
     }
-    serializer.objectEnd(state);
+    serializer.structEnd(state);
 }
 
 ///
@@ -1526,13 +1560,13 @@ void serializeValue(S, V : const T[K], T, K)(ref S serializer, V value)
         serializer.putValue(null);
         return;
     }
-    auto state = serializer.objectBegin();
+    auto state = serializer.structBegin();
     foreach (key, ref val; value)
     {
         serializer.putEscapedKey(key.to!string);
         serializer.putValue(val);
     }
-    serializer.objectEnd(state);
+    serializer.structEnd(state);
 }
 
 ///
@@ -1556,7 +1590,7 @@ void serializeValue(S,  V : const T[K], T, K)(ref S serializer, V value)
         return;
     }
     char[40] buffer = void;
-    auto state = serializer.objectBegin();
+    auto state = serializer.structBegin();
     foreach (key, ref val; value)
     {
         import std.format : sformat;
@@ -1564,7 +1598,7 @@ void serializeValue(S,  V : const T[K], T, K)(ref S serializer, V value)
         serializer.putEscapedKey(str);
         .serializeValue(serializer, val);
     }
-    serializer.objectEnd(state);
+    serializer.structEnd(state);
 }
 
 ///
@@ -1647,13 +1681,13 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
             serializer.putValue(null);
             return;
         }
-        auto valState = serializer.objectBegin();
+        auto valState = serializer.structBegin();
         foreach (i, key; value.keys)
         {
             serializer.putKey(key);
             serializer.serializeValue(value.values[i]);
         }
-        serializer.objectEnd(valState);
+        serializer.structEnd(valState);
         return;
     }
     else
@@ -1663,7 +1697,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     }
     else
     {
-        auto state = serializer.objectBegin();
+        auto state = serializer.structBegin();
         foreach(member; aliasSeqOf!(SerializableMembers!V))
         {{
             enum key = serdeGetKeyOut!(__traits(getMember, value, member));
@@ -1705,13 +1739,13 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                             continue;
                         }
                     }
-                    auto valState = serializer.arrayBegin();
+                    auto valState = serializer.listBegin();
                     foreach (ref elem; val)
                     {
                         serializer.elemBegin;
                         serializer.serializeValue(elem);
                     }
-                    serializer.arrayEnd(valState);
+                    serializer.listEnd(valState);
                 }
                 else
                 static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
@@ -1724,13 +1758,13 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                             continue F;
                         }
                     }
-                    auto valState = serializer.objectBegin();
+                    auto valState = serializer.structBegin();
                     foreach (key, elem; val)
                     {
                         serializer.putKey(key);
                         serializer.serializeValue(elem);
                     }
-                    serializer.objectEnd(valState);
+                    serializer.structEnd(valState);
                 }
                 else
                 static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
@@ -1747,7 +1781,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         {
             value.finalizeSerialization(serializer);
         }
-        serializer.objectEnd(state);
+        serializer.structEnd(state);
     }
 }
 
@@ -1778,10 +1812,10 @@ unittest
     {
         void serialize(S)(ref S serializer) const
         {
-            auto state = serializer.objectBegin;
+            auto state = serializer.structBegin;
             serializer.putEscapedKey("foo");
             serializer.putValue("bar");
-            serializer.objectEnd(state);
+            serializer.structEnd(state);
         }
     }
     enum json = `{"foo":"bar"}`;
@@ -1830,7 +1864,7 @@ unittest
             import asdf: serializeValue;
             import mir.algebraic: visit;
 
-            auto o = serializer.objectBegin();
+            auto o = serializer.structBegin();
             serializer.putKey("tag");
             serializer.serializeValue(kind);
             serializer.putKey("data");
@@ -1839,7 +1873,7 @@ unittest
                 (const Response[string] v) => serializer.serializeValue(cast(const(Response)[string])v),
                 (v) => serializer.serializeValue(v),
             );
-            serializer.objectEnd(o);
+            serializer.structEnd(o);
         }
 
         SerdeException deserializeFromAsdf(Asdf asdfData)
