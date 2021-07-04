@@ -926,7 +926,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     /// Serialization primitives
-    uint structBegin()
+    uint structBegin(size_t length = 0)
     {
         static if(sep.length)
         {
@@ -954,7 +954,7 @@ struct JsonSerializer(string sep, Dg)
     }
 
     ///ditto
-    uint listBegin()
+    uint listBegin(size_t length = 0)
     {
         static if(sep.length)
         {
@@ -1195,7 +1195,7 @@ struct AsdfSerializer
 pure:
 
     /// Serialization primitives
-    size_t structBegin()
+    size_t structBegin(size_t length = 0)
     {
         app.put1(Asdf.Kind.object);
         return app.skip(4);
@@ -1208,7 +1208,7 @@ pure:
     }
 
     ///ditto
-    size_t listBegin()
+    size_t listBegin(size_t length = 0)
     {
         app.put1(Asdf.Kind.array);
         return app.skip(4);
@@ -1671,7 +1671,48 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     static if (is(Unqual!V == Algebraic!TypeSet, TypeSet...))
     {
         import mir.algebraic: visit;
-        value.visit!((auto ref v) => .serializeValue(serializer, v));
+        value.visit!((auto ref v) {
+            alias T = typeof(v);
+            static if (isStringMap!T )
+            {
+                if(v == v.init)
+                {
+                    auto valState = serializer.structBegin();
+                    serializer.structEnd(valState);
+                    return;
+                }
+            }
+            else
+            static if (isAssociativeArray!T)
+            {
+                if(v is null)
+                {
+                    auto valState = serializer.structBegin();
+                    serializer.structEnd(valState);
+                    return;
+                }
+            }
+            else
+            static if (isSomeString!T)
+            {
+                if(v is null)
+                {
+                    serializer.putValue("");
+                    return;
+                }
+            }
+            else
+            static if (isDynamicArray!T)
+            {
+                if(v is null)
+                {
+                    auto valState = serializer.listBegin();
+                    serializer.listEnd(valState);
+                    return;
+                }
+            }
+            .serializeValue(serializer, v);
+        });
     }
     else
     static if (isStringMap!V)
@@ -2849,6 +2890,9 @@ unittest
     assert(array[4].get!string == "str");
 
     assert(value.serializeToJson == `{"b":5.0,"a":[11,true,false,null,"str"]}`);
+    value = [JsonAlgebraic[].init.JsonAlgebraic, StringMap!JsonAlgebraic.init.JsonAlgebraic, string.init.JsonAlgebraic];
+    // algebraics have type safe serialization instead of null values
+    assert(value.serializeToJson == `[[],{},""]`, value.serializeToJson);
 }
 
 /++
