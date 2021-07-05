@@ -52,32 +52,14 @@ unittest
         }
     }
 
-    static struct DateTimeProxy
-    {
-        DateTime datetime;
-        alias datetime this;
-
-        SerdeException deserializeFromAsdf()(Asdf data)
-        {
-            string val;
-            if (auto exc = deserializeScopedString(data, val))
-                return exc;
-            this = DateTimeProxy(DateTime.fromISOString(val));
-            return null;
-        }
-
-        void serialize(S)(ref S serializer) const pure
-        {
-            serializer.putValue(datetime.toISOString);
-        }
-    }
+    import mir.timestamp: Timestamp;
 
     static struct S
     {
         static int staticNotSeialised = 5;
         enum int enumsNotSeialised = 3;
 
-        @serdeProxy!DateTimeProxy
+        @serdeProxy!Timestamp
         DateTime time;
 
         C object;
@@ -88,7 +70,7 @@ unittest
         string bar;
     }
 
-    enum json = `{"time":"20160304T000000","object":{"foo":14.0},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+    enum json = `{"time":"2016-03-04T00:00:00Z","object":{"foo":14.0},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
     auto value = S(
         DateTime(2016, 3, 4),
         new C,
@@ -1053,6 +1035,14 @@ struct JsonSerializer(string sep, Dg)
     }
 
     ///ditto
+    import mir.timestamp: Timestamp;
+    void putValue(Timestamp timestamp)
+    {
+        import mir.format: stringBuf, getData;
+        putValue(stringBuf() << timestamp << getData);
+    }
+
+    ///ditto
     void putValue(bool b)
     {
         if(b)
@@ -1260,6 +1250,14 @@ pure:
     void putValue(bool b)
     {
         with(Asdf.Kind) app.put1(b ? true_ : false_);
+    }
+
+    ///ditto
+    import mir.timestamp: Timestamp;
+    void putValue(Timestamp timestamp)
+    {
+        import mir.format: stringBuf, getData;
+        putValue(stringBuf() << timestamp << getData);
     }
 
     ///ditto
@@ -1651,6 +1649,7 @@ unittest
 void serializeValue(S, V)(ref S serializer, auto ref V value)
     if(!isNullable!V && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
 {
+    import mir.timestamp: Timestamp;
     import mir.algebraic : Algebraic;
     import mir.string_map : isStringMap;
     static if(is(V == class) || is(V == interface))
@@ -1665,6 +1664,12 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     static if (hasUDA!(V, serdeProxy))
     {{
         serializer.serializeValue(value.to!(serdeGetProxy!V));
+        return;
+    }}
+    else
+    static if (is(Unqual!V == Timestamp))
+    {{
+        serializer.putValue(value);
         return;
     }}
     else
@@ -2529,6 +2534,16 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
 {
     import mir.algebraic;
     import mir.string_map;
+    import mir.timestamp;
+    static if (is(V == Timestamp))
+    {
+        const(char)[] str;
+        if (auto exc = deserializeValue(data, str))
+            return exc;
+        value = Timestamp(str);
+        return null;
+    }
+    else
     static if (is(V == StringMap!T, T))
     {
         auto kind = data.kind;
@@ -2747,7 +2762,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
                     return null;
                 }
             }
-            return unexpectedKind!("Cann't desrialize " ~ V.stringof ~ ". Unexpected data:")(data.kind);
+            return unexpectedKind!("Cann't deserialize " ~ V.stringof ~ ". Unexpected data:")(data.kind);
         }
 
         static if(is(V == class) || is(V == interface))
