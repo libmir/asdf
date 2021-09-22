@@ -243,6 +243,27 @@ unittest
 
     bar.nullable = 777;
     assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
+
+
+
+    static struct S
+    {
+        long i;
+
+        SerdeException deserializeFromAsdf(Asdf data)
+        {
+            if (auto exc = deserializeValue(data, i))
+            return exc;
+            return null;
+        }
+    }
+
+    static struct T
+    {
+        Nullable!S test;
+    }
+    T t = deserialize!T(`{ "test": 5 }`);
+    assert(!t.test.i == 5);
 }
 
 
@@ -2566,6 +2587,21 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
         }
     }
     else
+    static if (isNullable!V)
+    {
+        if (data.kind == Asdf.Kind.null_)
+        {
+            value.nullify;
+            return null;
+        }
+
+        typeof(value.get) payload;
+        if (auto exc = .deserializeValue(data, payload))
+            return exc;
+        value = payload;
+        return null;
+    }
+    else
     static if (is(V == Algebraic!TypeSet, TypeSet...))
     {
         import std.meta: anySatisfy, Filter;
@@ -2723,21 +2759,6 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
     static if (__traits(hasMember, value, "deserializeFromAsdf"))
     {
         return __traits(getMember, value, "deserializeFromAsdf")(data);
-    }
-    else
-    static if (isNullable!V)
-    {
-        if (data.kind == Asdf.Kind.null_)
-        {
-            value.nullify;
-            return null;
-        }
-
-        typeof(value.get) payload;
-        if (auto exc = .deserializeValue(data, payload))
-            return exc;
-        value = payload;
-        return null;
     }
     else
     static if (hasUDA!(V, serdeProxy))
@@ -3102,9 +3123,7 @@ private template isNullable(T)
         is(typeof(__traits(getMember, T, "isNull")) == bool) &&
         hasMember!(T, "get") &&
         !is(typeof(__traits(getMember, T, "get")) == void) &&
-        hasMember!(T, "nullify") &&
-        is(typeof(__traits(getMember, T, "nullify")) == void)
-    )
+        hasMember!(T, "nullify"))
     {
         enum isNullable = true;
     }
