@@ -12,6 +12,7 @@ Publicly imports `mir.serde` from the `mir-algorithm` package.
 module asdf.serialization;
 
 import asdf.jsonparser: assumePure;
+import mir.algebraic: isVariant;
 import mir.reflection;
 import std.range.primitives: isOutputRange;
 public import mir.serde;
@@ -243,6 +244,27 @@ unittest
 
     bar.nullable = 777;
     assert (deserialize!Bar(`{"nullable":777,"field":"it's a bar"}`) == Bar(Nullable!long(777), "it's a bar"));
+
+    static struct S
+    {
+        long i;
+
+        SerdeException deserializeFromAsdf(Asdf data)
+        {
+            if (auto exc = deserializeValue(data, i))
+                return exc;
+            return null;
+        }
+    }
+
+    static struct T
+    {
+        import std.typecons: Nullable;
+        // import mir.algebraic: Nullable;
+        Nullable!S test;
+    }
+    T t = deserialize!T(`{ "test": 5 }`);
+    assert(t.test.i == 5);
 }
 
 
@@ -1482,7 +1504,7 @@ void serializeValue(S, R)(ref S serializer, R value)
     if ((isInputRange!R) &&
         !isSomeChar!(ElementType!R) &&
         !isDynamicArray!R &&
-        !isNullable!R)
+        !isStdNullable!R)
 {
     auto state = serializer.listBegin();
     foreach (ref elem; value)
@@ -1612,7 +1634,7 @@ unittest
 
 /// Nullable type serialization
 void serializeValue(S, N)(ref S serializer, auto ref N value)
-    if (isNullable!N)
+    if (isStdNullable!N && !isVariant!N)
 {
     if(value.isNull)
     {
@@ -1647,7 +1669,7 @@ unittest
 
 /// Struct and class type serialization
 void serializeValue(S, V)(ref S serializer, auto ref V value)
-    if(!isNullable!V && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
+    if((!isStdNullable!V || isVariant!V) && isAggregateType!V && !is(V : BigInt) && !isInputRange!V)
 {
     import mir.timestamp: Timestamp;
     import mir.algebraic : Algebraic;
@@ -2163,7 +2185,7 @@ Deserializes string value.
 This function allocates new string.
 +/
 SerdeException deserializeValue(V)(Asdf data, ref V value)
-    if(is(V : const(char)[]) && !isAggregateType!V && !is(V == enum) && !isNullable!V)
+    if(is(V : const(char)[]) && !isAggregateType!V && !is(V == enum) && !isStdNullable!V)
 {
     auto kind = data.kind;
     with(Asdf.Kind) switch(kind)
@@ -2572,6 +2594,22 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
         import mir.internal.meta: Contains;
         alias Types = V.AllowedTypes;
         alias contains = Contains!Types;
+        import mir.algebraic: isNullable;
+        static if (isNullable!V && TypeSet.length == 2)
+        {
+            if (data.kind == Asdf.Kind.null_)
+            {
+                value = null;
+                return null;
+            }
+
+            V.AllowedTypes[1] payload;
+            if (auto exc = .deserializeValue(data, payload))
+                return exc;
+            value = payload;
+            return null;
+        }
+        else
         switch (data.kind)
         {
             static if (contains!(typeof(null)))
@@ -2720,12 +2758,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
         return null;
     }
     else
-    static if (__traits(hasMember, value, "deserializeFromAsdf"))
-    {
-        return __traits(getMember, value, "deserializeFromAsdf")(data);
-    }
-    else
-    static if (isNullable!V)
+    static if (isStdNullable!V)
     {
         if (data.kind == Asdf.Kind.null_)
         {
@@ -2738,6 +2771,11 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
             return exc;
         value = payload;
         return null;
+    }
+    else
+    static if (__traits(hasMember, value, "deserializeFromAsdf"))
+    {
+        return __traits(getMember, value, "deserializeFromAsdf")(data);
     }
     else
     static if (hasUDA!(V, serdeProxy))
