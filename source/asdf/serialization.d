@@ -259,8 +259,8 @@ unittest
 
     static struct T
     {
-        import std.typecons: Nullable;
-        // import mir.algebraic: Nullable;
+        // import std.typecons: Nullable;
+        import mir.algebraic: Nullable;
         Nullable!S test;
     }
     T t = deserialize!T(`{ "test": 5 }`);
@@ -1683,17 +1683,10 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         }
     }
 
-    static if (hasUDA!(V, serdeProxy))
-    {{
-        serializer.serializeValue(value.to!(serdeGetProxy!V));
-        return;
-    }}
-    else
     static if (is(Unqual!V == Timestamp))
-    {{
+    {
         serializer.putValue(value);
-        return;
-    }}
+    }
     else
     static if (is(Unqual!V == Algebraic!TypeSet, TypeSet...))
     {
@@ -1762,6 +1755,11 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
     static if(__traits(hasMember, V, "serialize"))
     {
         value.serialize(serializer);
+    }
+    else
+    static if (hasUDA!(V, serdeProxy))
+    {
+        serializer.serializeValue(value.to!(serdeGetProxy!V));
     }
     else
     {
