@@ -428,6 +428,7 @@ unittest
 V deserialize(V)(Asdf data)
 {
     V value;
+    static if (is(V == class)) value = new V;
     if (auto exc = deserializeValue(data, value))
         throw exc;
     return value;
@@ -2281,6 +2282,7 @@ SerdeException deserializeValue(V : T[], T)(Asdf data, ref V value)
                 value = new T[elems.save.count];
                 foreach(ref e; value)
                 {
+                    static if(is(T == class)) e = new T;
                     if (auto exc = .deserializeValue(elems.front, e))
                         return exc;
                     elems.popFront;
