@@ -722,7 +722,25 @@ struct Asdf
                 }
                 else
                 static if(__traits(compiles, assumePure(() => str.to!T)()))
-                    return assumePure(() => str.to!T)();
+                {
+                    static if (isFloatingPoint!T)
+                    {
+                        import mir.bignum.internal.dec2float: decimalToFloatImpl;
+                        import mir.bignum.internal.parse: parseJsonNumberImpl;
+                        auto result = str.parseJsonNumberImpl;
+                        if (!result.success)
+                            throw new Exception("Failed to deserialize number");
+
+                        auto fp = decimalToFloatImpl!(Unqual!T)(result.coefficient, result.exponent);
+                        if (result.sign)
+                            fp = -fp;
+                        return fp;
+                    }
+                    else
+                    {
+                        return assumePure(() => str.to!T)();
+                    }
+                }
                 else goto default;
             }
             case string:

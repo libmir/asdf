@@ -2099,7 +2099,24 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
 
     if(kind != Asdf.Kind.number)
         return unexpectedKind(kind);
-    value = (cast(string) data.data[2 .. $]).to!V;
+
+    static if (isFloatingPoint!V)
+    {
+        import mir.bignum.internal.dec2float: decimalToFloatImpl;
+        import mir.bignum.internal.parse: parseJsonNumberImpl;
+        auto result = (cast(string) data.data[2 .. $]).parseJsonNumberImpl;
+        if (!result.success)
+            throw new Exception("Failed to deserialize number");
+
+        auto fp = decimalToFloatImpl!(Unqual!V)(result.coefficient, result.exponent);
+        if (result.sign)
+            fp = -fp;
+        value = fp;
+    }
+    else
+    {
+        value = (cast(string) data.data[2 .. $]).to!V;
+    }
     return null;
 }
 
