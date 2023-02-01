@@ -71,15 +71,16 @@ unittest
         string bar;
     }
 
-    enum json = `{"time":"2016-03-04T00:00:00Z","object":{"foo":14.0},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
+    enum json = `{"time":"2016-03-04T00:00:00-00:00","object":{"foo":14.0},"map":{"a":"A"},"bar_common":"escaped chars = '\\', '\"', '\t', '\r', '\n'"}`;
     auto value = S(
         DateTime(2016, 3, 4),
         new C,
         [E.a : "A"],
         "escaped chars = '\\', '\"', '\t', '\r', '\n'");
-    assert(serializeToJson(cast(const)value) == json, serializeToJson(cast(const)value)); // check serialization of const data
-    assert(serializeToAsdf(value).to!string == json, serializeToAsdf(value).to!string);
-    assert(deserialize!S(json).serializeToJson == json);
+    import mir.test: should;
+    serializeToJson(cast(const)value).should == json; // check serialization of const data
+    serializeToAsdf(value).to!string.should == json;
+    deserialize!S(json).serializeToJson.should == json;
 }
 
 /// `finalizeSerialization` method
@@ -1908,15 +1909,17 @@ unittest
 
     static struct Response
     {
-        import mir.algebraic: TaggedVariant;
+        import mir.algebraic: Variant;
 
-        alias Union = TaggedVariant!(
-            ["double_", "string", "array", "table"],
-            double,
-            string,
-            Response[],
-            Response[string],
-        );
+        static union Response_
+        {
+            double double_;
+            immutable(char)[] string;
+            Response[] array;
+            Response[immutable(char)[]] table;
+        }
+
+        alias Union = Variant!Response_;
 
         Union data;
         alias Tag = Union.Kind;
