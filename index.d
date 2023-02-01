@@ -37,7 +37,7 @@ $(BOOKTABLE ,
     )
 )
 
-Copyright: Copyright © 2020-, Ilya Yaroshenko.
+Copyright: Copyright © 2020-, Ilia Ki.
 
 Macros:
         TITLE=ASDF

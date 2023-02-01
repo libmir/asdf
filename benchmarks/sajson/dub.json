@@ -1,7 +1,7 @@
 {
 	"name": "sajson-benchmark",
 	"authors": [
-		"Ilya Yaroshenko"
+		"Ilia Ki"
 	],
 	"dependencies": {
 		"asdf": {"path": "../../"}

@@ -3,7 +3,7 @@ ASDF Representation
 
 Copyright: Tamedia Digital, 2016
 
-Authors: Ilya Yaroshenko
+Authors: Ilia Ki
 
 License: MIT
 

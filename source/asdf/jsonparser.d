@@ -3,7 +3,7 @@ JSON Parsing API
 
 Copyright: Tamedia Digital, 2016-2017
 
-Authors: Ilya Yaroshenko
+Authors: Ilia Ki
 
 License: MIT
 

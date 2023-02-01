@@ -4,7 +4,7 @@ The representation can be used to compute a difference between JSON object-trees
 
 Copyright: Tamedia Digital, 2016
 
-Authors: Ilya Yaroshenko
+Authors: Ilia Ki
 
 License: BSL-1.0
 +/

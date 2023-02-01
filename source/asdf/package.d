@@ -5,7 +5,7 @@ Publicly imports $(SUBMODULE _asdf), $(SUBMODULE jsonparser), and $(SUBMODULE se
 
 Copyright: Tamedia Digital, 2016
 
-Authors: Ilya Yaroshenko
+Authors: Ilia Ki
 
 License: MIT
 

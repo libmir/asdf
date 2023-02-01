@@ -2,7 +2,7 @@
 	"name": "asdf",
 	"description": "Fast, Expressive, and Easy to use JSON Serialization Library with optional SSE4 Optimization.",
 	"license": "BSL-1.0",
-	"authors": ["Ilya Yaroshenko", "Yannick Koechlin"],
+	"authors": ["Ilia Ki", "Yannick Koechlin"],
 	"copyright": "Tamedia Digital, 2016",
     "dependencies": {
         "mir-algorithm": ">=3.10.43"
