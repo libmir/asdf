@@ -796,7 +796,6 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
                     {
                         while (strEnd >= strPtr + 16)
                         {
-                            pragma(msg, "EEEE");
                             byte16 str1 = loadUnaligned!byte16(cast(byte*)strPtr);
                             size_t ecx = __builtin_ia32_pcmpistri128(num2, str1, 0x10);
                             storeUnaligned!byte16(str1, cast(byte*)dataPtr);
