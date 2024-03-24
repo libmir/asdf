@@ -376,9 +376,9 @@ string serializeToJsonPretty(string sep = "\t", V)(auto ref V value)
     import std.array: appender;
     import std.functional: forward;
 
-    auto app = appender!(char[]);
+    auto app = appender!(string);
     serializeToJsonPretty!sep(forward!value, app);
-    return cast(string) app.data;
+    return app.data;
 }
 
 ///
