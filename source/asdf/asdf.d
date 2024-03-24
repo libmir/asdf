@@ -401,12 +401,12 @@ struct Asdf
             private ubyte[] _data;
             private Asdf _front;
 
-            auto save()() pure @property
+            auto save()() @safe pure @property
             {
                 return this;
             }
 
-            void popFront() pure
+            void popFront() @safe pure
             {
                 while(!_data.empty)
                 {
@@ -464,7 +464,7 @@ struct Asdf
                 return _front;
             }
 
-            bool empty() pure @property
+            bool empty() @safe pure @property
             {
                 return _front.data.length == 0;
             }
@@ -491,12 +491,12 @@ struct Asdf
             private ubyte[] _data;
             private Tuple!(const(char)[], "key", Asdf, "value") _front;
 
-            auto save() pure @property
+            auto save() @safe pure @property
             {
                 return this;
             }
 
-            void popFront() pure
+            void popFront() @safe pure
             {
                 while(!_data.empty)
                 {
@@ -560,7 +560,7 @@ struct Asdf
                 return _front;
             }
 
-            bool empty() pure @property
+            bool empty() @safe pure @property
             {
                 return _front.value.data.length == 0;
             }
@@ -613,7 +613,7 @@ struct Asdf
     Returns
         ASDF value if it was found (first win) or ASDF with empty plain data.
     +/
-    Asdf opIndex(in char[][] keys...) pure
+    Asdf opIndex(in char[][] keys...) @safe pure
     {
         auto asdf = this;
         if(asdf.data.empty)

@@ -138,7 +138,7 @@ Asdf parseJson(
     )
     (in char[] str)
 {
-    auto parser = jsonParser!(includingNewLine, spaces, assumeValid)(ASDFGCAllocator.instance, str);
+    auto parser = jsonParser!(includingNewLine, spaces, assumeValid)(&ASDFGCAllocator.instance, str);
     return parseJson(parser);
 }
 
@@ -463,7 +463,14 @@ unittest
 }
 
 ///
-auto jsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])(auto ref Allocator allocator, Input input) {
+auto jsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])(auto ref Allocator allocator, Input input)
+    if (!isPointer!Allocator)
+{
+    return JsonParser!(includingNewLine, hasSpaces, assumeValid, Allocator, Input)(allocator, input);
+}
+
+///
+auto jsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Allocator, Input = const(ubyte)[])(Allocator* allocator, Input input) {
     return JsonParser!(includingNewLine, hasSpaces, assumeValid, Allocator, Input)(allocator, input);
 }
 
@@ -485,10 +492,15 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
     enum bool chunked = !is(Input : const(char)[]);
 
     this(ref Allocator allocator, Input input)
-
     {
         this.input = input;
         this.allocator = &allocator;
+    }
+
+    this(Allocator* allocator, Input input)
+    {
+        this.input = input;
+        this.allocator = allocator;
     }
 
     bool prepareInput_()()
@@ -570,8 +582,23 @@ struct JsonParser(bool includingNewLine, bool hasSpaces, bool assumeValid, Alloc
         return parse(location);
     }
 
+    static if(is(Allocator == ASDFGCAllocator))
+    {
+        auto parse(out size_t location) @trusted
+        {
+            return parseImpl(location);
+        }
+    }
+    else
+    {
+        auto parse(out size_t location)
+        {
+            return parseImpl(location);
+        }
+    }
+
     pragma(inline, false)
-    AsdfErrorCode parse(out size_t location)
+    private AsdfErrorCode parseImpl(out size_t location)
     {
         version(SSE42)
         {
