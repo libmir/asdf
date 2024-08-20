@@ -1487,11 +1487,6 @@ unittest
 void serializeValue(S, T)(ref S serializer, T[] value)
     if(!isSomeChar!T)
 {
-    if(value is null)
-    {
-        serializer.putValue(null);
-        return;
-    }
     auto state = serializer.listBegin();
     foreach (ref elem; value)
     {
