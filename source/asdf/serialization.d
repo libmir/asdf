@@ -16,6 +16,7 @@ import mir.algebraic: isVariant;
 import mir.reflection;
 import std.range.primitives: isOutputRange;
 public import mir.serde;
+import mir.internal_asdf: hasUDA;
 
 ///
 pure
@@ -431,7 +432,7 @@ V deserialize(V)(Asdf data)
     V value;
     static if (is(V == class)) value = new V;
     if (auto exc = deserializeValue(data, value))
-        throw exc;
+        throw (()@trusted => cast()exc)();
     return value;
 }
 
@@ -1305,7 +1306,7 @@ pure:
         if (isNumeric!Num && !is(Num == enum))
     {
         import mir.format: print;
-        import mir.internal.utility: isFloatingPoint;
+        import mir.internal_asdf: isFloatingPoint;
 
         static if (isFloatingPoint!Num)
         {
@@ -1538,7 +1539,7 @@ unittest
     assert(serializeToJson(ar) == `[1,2]`);
     assert(serializeToJson(ar[]) == `[1,2]`);
     assert(serializeToJson(ar[0 .. 0]) == `[]`);
-    assert(serializeToJson((uint[]).init) == `null`);
+    assert(serializeToJson((uint[]).init) == `[]`);
 }
 
 /// String-value associative array serialization
@@ -1763,25 +1764,25 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
         auto state = serializer.structBegin();
         foreach(member; aliasSeqOf!(SerializableMembers!V))
         {{
-            enum key = serdeGetKeyOut!(__traits(getMember, value, member));
+            enum key = serdeGetKeyOut!(V, member);
 
             static if (key !is null)
             {
-                static if (hasUDA!(__traits(getMember, value, member), serdeIgnoreDefault))
+                static if (hasUDA!(V, member, serdeIgnoreDefault))
                 {
                     if (__traits(getMember, value, member) == __traits(getMember, V.init, member))
                         continue;
                 }
                 
-                static if(hasUDA!(__traits(getMember, value, member), serdeIgnoreOutIf))
+                static if(hasUDA!(V, member, serdeIgnoreOutIf))
                 {
-                    alias pred = serdeGetIgnoreOutIf!(__traits(getMember, value, member));
+                    alias pred = serdeGetIgnoreOutIf!(V, member);
                     if (pred(__traits(getMember, value, member)))
                         continue;
                 }
-                static if(hasUDA!(__traits(getMember, value, member), serdeTransformOut))
+                static if(hasUDA!(V, member, serdeTransformOut))
                 {
-                    alias f = serdeGetTransformOut!(__traits(getMember, value, member));
+                    alias f = serdeGetTransformOut!(V, member);
                     auto val = f(__traits(getMember, value, member));
                 }
                 else
@@ -1791,7 +1792,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
 
                 serializer.putEscapedKey(key);
 
-                static if(hasUDA!(__traits(getMember, value, member), serdeLikeList))
+                static if(hasUDA!(V, member, serdeLikeList))
                 {
                     alias V = typeof(val);
                     static if(is(V == interface) || is(V == class) || is(V : E[], E))
@@ -1811,7 +1812,7 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                     serializer.listEnd(valState);
                 }
                 else
-                static if(hasUDA!(__traits(getMember, value, member), serdeLikeStruct))
+                static if(hasUDA!(V, member, serdeLikeStruct))
                 {
                     static if(is(V == interface) || is(V == class) || is(V : E[T], E, T))
                     {
@@ -1830,9 +1831,9 @@ void serializeValue(S, V)(ref S serializer, auto ref V value)
                     serializer.structEnd(valState);
                 }
                 else
-                static if(hasUDA!(__traits(getMember, value, member), serdeProxy))
+                static if(hasUDA!(V, member, serdeProxy))
                 {
-                    serializer.serializeValue(val.to!(serdeGetProxy!(__traits(getMember, value, member))));
+                    serializer.serializeValue(val.to!(serdeGetProxy!(V, member)));
                 }
                 else
                 {
@@ -2606,7 +2607,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
     static if (is(V == Algebraic!TypeSet, TypeSet...))
     {
         import std.meta: anySatisfy, Filter;
-        import mir.internal.meta: Contains;
+        import mir.internal_asdf: Contains;
         alias Types = V.AllowedTypes;
         alias contains = Contains!Types;
         import mir.algebraic: isNullable;
@@ -2854,7 +2855,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
             {
                 static foreach(member; serdeFinalProxyDeserializableMembers!V)
                 {{
-                    enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
+                    enum keys = serdeGetKeysIn!(V, member);
                     static if (keys.length)
                     {
                         foreach(elem; data.byKeyValue)
@@ -2873,7 +2874,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
                         }
                     }
 
-                    static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
+                    static if (!hasUDA!(V, member, serdeOptional))
                         if (!__traits(getMember, requiredFlags, member))
                             return exc!member;
                 }}
@@ -2886,7 +2887,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
                     {
                         static foreach(member; serdeFinalProxyDeserializableMembers!V)
                         {{
-                            enum keys = serdeGetKeysIn!(__traits(getMember, value, member));
+                            enum keys = serdeGetKeysIn!(V, member);
                             static if (keys.length)
                             {
                                 static foreach (key; keys)
@@ -2903,7 +2904,7 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
                 }
 
                 static foreach(member; __traits(allMembers, SerdeFlags!V))
-                    static if (!hasUDA!(__traits(getMember, value, member), serdeOptional))
+                    static if (!hasUDA!(V, member, serdeOptional))
                         if (!__traits(getMember, requiredFlags, member))
                             return exc!member;
             }

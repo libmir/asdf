@@ -160,12 +160,12 @@ struct Asdf
     }
 
     /// Returns ASDF Kind
-    ubyte kind() const pure @safe @nogc
+    ubyte kind() const pure @trusted @nogc
     {
         if (!data.length)
         {
             static immutable exc = new EmptyAsdfException;
-            throw exc;
+            throw (()@trusted => cast()exc)();
         }
         return data[0];
     }
@@ -241,7 +241,7 @@ struct Asdf
         if (!data.length)
         {
             static immutable exc = new EmptyAsdfException("Data buffer is empty");
-            throw exc;
+            throw cast()exc;
         }
         auto t = data[0];
         switch(t)
