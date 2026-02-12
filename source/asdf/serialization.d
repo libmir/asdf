@@ -17,6 +17,7 @@ import mir.reflection;
 import std.range.primitives: isOutputRange;
 public import mir.serde;
 import mir.internal_asdf: hasUDA;
+import std.uuid: UUID, UUIDParsingException;
 
 ///
 pure
@@ -2165,6 +2166,38 @@ SerdeException deserializeValue(V)(Asdf data, ref V value)
             throw new Exception("Unable to deserialize string '" ~ s ~ "' to " ~ V.stringof ~ "Allowed keys:" ~ allowedKeys.stringof);
     }
     return null;
+}
+
+/// UUID serialization
+void serializeValue(S)(ref S serializer, const UUID value)
+{
+    serializer.putValue(value.toString());
+}
+
+/// Deserialize UUID value
+SerdeException deserializeValue(V : UUID)(Asdf data, ref V value)
+{
+    auto kind = data.kind;
+    if (kind == Asdf.Kind.string)
+    {
+        const(char)[] v;
+        .deserializeScopedString(data, v);
+        try
+        {
+            value = UUID(v);
+        }
+        catch (UUIDParsingException e)
+        {
+             return new SerdeException("Invalid UUID string: " ~ cast(string)v);
+        }
+        return null;
+    }
+    else if (kind == Asdf.Kind.null_)
+    {
+        value = UUID.init;
+        return null;
+    }
+    return unexpectedKind(kind);
 }
 
 ///
